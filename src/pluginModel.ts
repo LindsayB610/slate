@@ -30,4 +30,11 @@ export function keepLatestSnapshot(
   return { ...current, [source]: result };
 }
 
+/** Returns whether a subscription must be immediately released after an async setup race. */
+export function releaseIfDisposed(disposed: boolean, unlisten: () => void): boolean {
+  if (!disposed) return false;
+  unlisten();
+  return true;
+}
+
 function normalizeRoot(value: string): string { return value.length > 1 ? value.replace(/\/+$/, "") : value; }

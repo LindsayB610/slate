@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { keepLatestSnapshot, shouldRefreshSource, validateSourceMetadata } from "../src/pluginModel.js";
+import { keepLatestSnapshot, releaseIfDisposed, shouldRefreshSource, validateSourceMetadata } from "../src/pluginModel.js";
 
 describe("Slate plugin refresh boundary", () => {
   it("accepts only unique Slate-owned source metadata and supported views", () => {
@@ -19,5 +19,13 @@ describe("Slate plugin refresh boundary", () => {
     expect(keepLatestSnapshot(current, "tasks", 2, 2, null)).toEqual(current);
     expect(keepLatestSnapshot(current, "tasks", 2, 3, { contents: "stale", updatedAt: 2 })).toEqual(current);
     expect(keepLatestSnapshot(current, "tasks", 3, 3, { contents: "new", updatedAt: 3 })).toEqual({ tasks: { contents: "new", updatedAt: 3 } });
+  });
+
+  it("releases a watcher that resolves after the view has already disposed", () => {
+    let released = 0;
+    expect(releaseIfDisposed(true, () => { released += 1; })).toBe(true);
+    expect(released).toBe(1);
+    expect(releaseIfDisposed(false, () => { released += 1; })).toBe(false);
+    expect(released).toBe(1);
   });
 });
