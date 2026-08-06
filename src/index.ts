@@ -69,7 +69,7 @@ export const workshopPluginDeclaration = {
   dataRoots: [] as string[],
   importActions: [] as string[],
   exportActions: [] as string[],
-  status: "planned" as const,
+  status: "ready" as const,
   runtime: { kind: "native-bridge" as const, entryPoint: "read-configured-markdown-source" },
   privateWorkspace: { kind: "runner-root" as const, requiredFields: ["slate.config.json"] },
 };

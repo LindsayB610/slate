@@ -8,7 +8,7 @@ describe("Slate Workshop plugin surface", () => {
       contractVersion: 1,
       id: "slate",
       navigationMode: "plugin",
-      status: "planned",
+      status: "ready",
       privateWorkspace: { requiredFields: ["slate.config.json"] },
       requiredLocalCapabilities: ["local-workspace"],
     });
