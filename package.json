@@ -10,6 +10,10 @@
     }
   },
   "files": ["dist", "README.md", "LICENSE"],
+  "peerDependencies": {
+    "@tauri-apps/api": "^2.0.0",
+    "react": "^19.0.0"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "prepare": "npm run build",
@@ -17,6 +21,11 @@
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
+    "@tauri-apps/api": "^2.11.1",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
     "typescript": "^5.9.2",
     "vitest": "^3.2.6"
   }

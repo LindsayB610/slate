@@ -1,16 +1,18 @@
 # Slate
 
-Slate is a local-first Markdown viewer for Workshop.
+Slate is a local-first Markdown viewer plugin for Workshop.
 It turns explicitly configured local Markdown files into clean reference views
 without copying their content to a server, repository, or cloud service.
 
 ## Relationship to Workshop
 
 Slate is the tool's source-of-truth repository. Workshop is the desktop host:
-it provides installation, navigation, local file access, native watching, and
-updater delivery. A Workshop adapter should consume this package's source
-configuration and presentation models; Slate does not bundle a desktop app or
-read local files by itself.
+it provides the desktop frame, promotion state, and constrained local-source
+capabilities. Slate exports `workshopPluginDeclaration` and
+`WorkshopToolView`; it reads only declared sources through the generic host
+capabilities `read_configured_markdown_sources`,
+`read_configured_markdown_source`, and `start_configured_markdown_watch`.
+It has peer dependencies on React and `@tauri-apps/api`.
 
 ## Configuration
 
