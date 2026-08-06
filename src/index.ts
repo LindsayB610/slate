@@ -60,12 +60,15 @@ export const workshopPluginDeclaration = {
   docsPath: "/docs/tools/slate.md",
   workspaceRequirement: "Needs a private folder containing slate.config.json.",
   uninstallSafetyCopy: "Disabling Slate hides the tool only. Local configuration and source files stay untouched.",
-  routes: [],
+  routes: [
+    { id: "uc", label: "UC", path: "/slate/uc", sectionId: "slate-uc" },
+    { id: "freezer", label: "Freezer", path: "/slate/freezer", sectionId: "slate-freezer" },
+  ],
   requiredLocalCapabilities: ["local-workspace"] as const,
   dataRoots: [] as string[],
   importActions: [] as string[],
   exportActions: [] as string[],
-  status: "ready" as const,
+  status: "planned" as const,
   runtime: { kind: "native-bridge" as const, entryPoint: "read-configured-markdown-source" },
   privateWorkspace: { kind: "runner-root" as const, requiredFields: ["slate.config.json"] },
 };
