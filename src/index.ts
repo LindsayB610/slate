@@ -22,6 +22,7 @@ export type MarkdownSection = {
   level: number;
   paragraphs: string[];
   items: string[];
+  dividerBefore: boolean;
 };
 
 export type MarkdownTab = {
@@ -114,15 +115,17 @@ export function parseSlateConfig(contents: string): SlateConfigResult {
 export function parseMarkdownSections(markdown: string): MarkdownSection[] {
   const sections: MarkdownSection[] = [];
   let current: MarkdownSection | undefined;
+  let dividerBefore = false;
 
   for (const rawLine of markdown.replace(/\r\n/g, "\n").split("\n")) {
     const heading = /^(#{1,6})\s+(.+?)\s*$/.exec(rawLine);
     if (heading) {
-      current = { heading: heading[2], level: heading[1].length, paragraphs: [], items: [] };
+      current = { heading: heading[2], level: heading[1].length, paragraphs: [], items: [], dividerBefore };
       sections.push(current);
+      dividerBefore = false;
       continue;
     }
-    if (/^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/.test(rawLine)) continue;
+    if (/^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/.test(rawLine)) { dividerBefore = true; continue; }
     if (!current || !rawLine.trim()) continue;
     const item = /^\s*(?:[-*+]|\d+\.)\s+(.+?)\s*$/.exec(rawLine);
     if (item) current.items.push(item[1]);
@@ -144,6 +147,13 @@ export function buildTopLevelTabs(sections: MarkdownSection[]): MarkdownTab[] {
     }
   }
   return tabs;
+}
+
+/** Separates a divider-delimited document title from the sections that become tabs. */
+export function splitTabbedDocument(sections: MarkdownSection[]): { intro: MarkdownSection[]; tabs: MarkdownTab[] } {
+  const firstTabStart = sections.findIndex((section, index) => section.level === 1 && index > 0 && section.dividerBefore);
+  if (firstTabStart === -1) return { intro: [], tabs: buildTopLevelTabs(sections) };
+  return { intro: sections.slice(0, firstTabStart), tabs: buildTopLevelTabs(sections.slice(firstTabStart)) };
 }
 
 export function parseMarkdownTable(markdown: string): MarkdownTable {

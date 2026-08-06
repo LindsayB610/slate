@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseMarkdownSections, parseMarkdownTable, buildTopLevelTabs } from "../src/index.js";
+import { parseMarkdownSections, parseMarkdownTable, buildTopLevelTabs, splitTabbedDocument } from "../src/index.js";
 
 describe("Slate presentation models", () => {
   it("groups Markdown sections under top-level tabs when requested", () => {
@@ -10,6 +10,12 @@ describe("Slate presentation models", () => {
   it("keeps a section emoji in its visible tab label", () => {
     const [tab] = buildTopLevelTabs(parseMarkdownSections("# 🎨 Creative\n## Current state\n- Sketch"));
     expect(tab.label).toBe("🎨 Creative");
+  });
+
+  it("keeps a divider-delimited document title above the tab set", () => {
+    const document = splitTabbedDocument(parseMarkdownSections("# Current operating state\n---\n# 🎨 Creative\n## Current state"));
+    expect(document.intro.map((section) => section.heading)).toEqual(["Current operating state"]);
+    expect(document.tabs.map((tab) => tab.label)).toEqual(["🎨 Creative"]);
   });
 
   it("preserves simple Markdown sections without imposing tabs", () => {
