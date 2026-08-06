@@ -148,18 +148,23 @@ export function buildTopLevelTabs(sections: MarkdownSection[]): MarkdownTab[] {
 
 export function parseMarkdownTable(markdown: string): MarkdownTable {
   const lines = markdown.replace(/\r\n/g, "\n").split("\n");
-  const headerIndex = lines.findIndex((line, index) => line.trim().startsWith("|") && isTableSeparator(lines[index + 1] ?? ""));
-  if (headerIndex === -1) throw new Error("Slate table view requires a Markdown table with a header and separator row.");
-
-  const headers = tableCells(lines[headerIndex]);
-  const rows: string[][] = [];
-  for (const line of lines.slice(headerIndex + 2)) {
-    if (!line.trim() || !line.trim().startsWith("|")) break;
-    const row = tableCells(line);
-    if (row.length !== headers.length) throw new Error("Slate table rows must match the header column count.");
-    rows.push(row);
+  const tables: MarkdownTable[] = [];
+  for (let headerIndex = 0; headerIndex < lines.length - 1; headerIndex += 1) {
+    if (!lines[headerIndex].trim().startsWith("|") || !isTableSeparator(lines[headerIndex + 1])) continue;
+    const headers = tableCells(lines[headerIndex]);
+    const rows: string[][] = [];
+    let rowIndex = headerIndex + 2;
+    while (rowIndex < lines.length && lines[rowIndex].trim().startsWith("|")) {
+      const row = tableCells(lines[rowIndex]);
+      if (row.length !== headers.length) throw new Error("Slate table rows must match the header column count.");
+      rows.push(row);
+      rowIndex += 1;
+    }
+    tables.push({ headers, rows });
+    headerIndex = rowIndex - 1;
   }
-  return { headers, rows };
+  if (!tables.length) throw new Error("Slate table view requires a Markdown table with a header and separator row.");
+  return tables.reduce((largest, table) => table.rows.length > largest.rows.length ? table : largest);
 }
 
 function isSourceDefinition(value: unknown): value is SlateSourceDefinition {

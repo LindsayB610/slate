@@ -21,6 +21,19 @@ describe("Slate presentation models", () => {
       .toEqual({ headers: ["Item", "Count", "Location"], rows: [["Tea", "2", "Shelf"]] });
   });
 
+  it("selects the largest valid table when a file includes a small legend", () => {
+    const table = parseMarkdownTable(`| State | Meaning |
+| --- | --- |
+| Open | Active |
+
+| Name | Owner | Next action |
+| --- | --- | --- |
+| North | Avery | Email |
+| South | Blair | Call |`);
+    expect(table.headers).toEqual(["Name", "Owner", "Next action"]);
+    expect(table.rows).toHaveLength(2);
+  });
+
   it("treats Markdown link and HTML syntax as text rather than executable markup", () => {
     const section = parseMarkdownSections("# Notes\n[bad](javascript:alert(1)) <img src=x onerror=alert(1)>")[0];
     expect(section.paragraphs[0]).toContain("javascript:");
