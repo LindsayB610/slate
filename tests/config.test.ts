@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseSlateConfig, slatePluginManifest } from "../src/index.js";
+import { parseSlateConfig, slatePluginManifest, workshopPluginDeclaration } from "../src/index.js";
 
 describe("Slate configuration", () => {
   it("accepts any number of uniquely identified local Markdown sources in the supported view formats", () => {
@@ -32,6 +32,14 @@ describe("Slate plugin contract", () => {
       displayName: "Slate",
       configFile: "slate.config.json",
       hostCapabilities: ["read-configured-markdown", "watch-configured-markdown"],
+    });
+  });
+
+  it("keeps the Workshop-facing declaration in the Slate package", () => {
+    expect(workshopPluginDeclaration).toMatchObject({
+      id: "slate",
+      configFile: "slate.config.json",
+      runtime: { entryPoint: "read-configured-markdown-source" },
     });
   });
 });

@@ -49,6 +49,27 @@ export const slatePluginManifest: SlatePluginManifest = {
   hostCapabilities: ["read-configured-markdown", "watch-configured-markdown"],
 };
 
+/**
+ * Data-only declaration consumed by a host's plugin registry.  Keeping this
+ * here means a host never needs to duplicate Slate's routes or configuration
+ * contract in its own source tree.
+ */
+export const workshopPluginDeclaration = {
+  ...slatePluginManifest,
+  description: "View explicitly configured local Markdown files without copying their content.",
+  docsPath: "/docs/tools/slate.md",
+  workspaceRequirement: "Needs a private folder containing slate.config.json.",
+  uninstallSafetyCopy: "Disabling Slate hides the tool only. Local configuration and source files stay untouched.",
+  routes: [],
+  requiredLocalCapabilities: ["local-workspace"] as const,
+  dataRoots: [] as string[],
+  importActions: [] as string[],
+  exportActions: [] as string[],
+  status: "ready" as const,
+  runtime: { kind: "native-bridge" as const, entryPoint: "read-configured-markdown-source" },
+  privateWorkspace: { kind: "runner-root" as const, requiredFields: ["slate.config.json"] },
+};
+
 export function parseSlateConfig(contents: string): SlateConfigResult {
   let value: unknown;
   try {
