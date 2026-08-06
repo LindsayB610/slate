@@ -18,5 +18,6 @@ describe("Slate Workshop plugin surface", () => {
     const markup = renderToStaticMarkup(<WorkshopToolView requestWorkspaceRoot={() => undefined} />);
     expect(markup).toContain("Slate private folder");
     expect(markup).toContain("Connect Slate");
+    expect(markup).not.toContain("disabled");
   });
 });

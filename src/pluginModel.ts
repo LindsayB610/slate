@@ -4,6 +4,18 @@ export type SlateSourceMetadata = Pick<SlateSourceDefinition, "id" | "label" | "
 export type SlateSnapshot = { contents: string; updatedAt: number };
 export type SlateSourceChange = { root: string; configFile: string; source: string };
 
+export const slateDemoSources: SlateSourceMetadata[] = [
+  { id: "tasks", label: "Tasks", view: "markdown-tabs" },
+  { id: "notes", label: "Notes", view: "markdown" },
+  { id: "inventory", label: "Inventory", view: "table" },
+];
+
+export const slateDemoSnapshots: Record<string, SlateSnapshot> = {
+  tasks: { updatedAt: 0, contents: "# Projects\n## Today\n- Prepare the project brief\n- Review open decisions\n# Home\n## Next actions\n- Plan the week" },
+  notes: { updatedAt: 0, contents: "# Notes\nKeep short reference notes close to the work." },
+  inventory: { updatedAt: 0, contents: "# Inventory\n\n| Item | Count | Location |\n| --- | --- | --- |\n| Tea | 2 | Shelf |\n| Rice | 1 | Pantry |" },
+};
+
 export function validateSourceMetadata(value: unknown): SlateSourceMetadata[] | null {
   if (!Array.isArray(value) || value.length === 0) return null;
   const sources: SlateSourceMetadata[] = [];
