@@ -50,7 +50,11 @@ Supported views:
 
 - `markdown-tabs` groups top-level Markdown headings into tabs.
 - `markdown` preserves a single, scrollable Markdown view.
-- `table` renders the first Markdown table with its source columns and row order.
+- `table` renders the largest valid Markdown table in the file, keeping its
+  source columns and row order. This lets a file include a small legend or key
+  before its primary data table. “Largest” means the most body rows; if tables
+  tie, Slate uses the first one. A valid table needs a header row and Markdown
+  separator row.
 
 ## Privacy model
 
