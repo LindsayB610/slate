@@ -122,6 +122,7 @@ export function parseMarkdownSections(markdown: string): MarkdownSection[] {
       sections.push(current);
       continue;
     }
+    if (/^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/.test(rawLine)) continue;
     if (!current || !rawLine.trim()) continue;
     const item = /^\s*(?:[-*+]|\d+\.)\s+(.+?)\s*$/.exec(rawLine);
     if (item) current.items.push(item[1]);

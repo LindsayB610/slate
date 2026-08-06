@@ -21,4 +21,8 @@ describe("Slate presentation models", () => {
     expect(section.paragraphs[0]).toContain("javascript:");
     expect(section.paragraphs[0]).toContain("<img");
   });
+
+  it("does not render Markdown divider lines as source content", () => {
+    expect(parseMarkdownSections("# Notes\n---\nKeep this nearby.")[0].paragraphs).toEqual(["Keep this nearby."]);
+  });
 });
