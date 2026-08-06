@@ -5,6 +5,11 @@ export type SlateSnapshot = { contents: string; updatedAt: number };
 export type SlateSourceChange = { root: string; configFile: string; source: string };
 export type InlineMarkdownToken = { type: "text"; value: string } | { type: "strong"; value: string } | { type: "link"; label: string; href: string };
 
+/** Offsets Markdown heading levels under Slate's own page title without flattening them. */
+export function slateHeadingTag(level: number): "h2" | "h3" | "h4" {
+  return level <= 1 ? "h2" : level === 2 ? "h3" : "h4";
+}
+
 /** Parses the small, safe inline Markdown subset Slate renders in local documents. */
 export function parseInlineMarkdown(value: string): InlineMarkdownToken[] {
   const tokens: InlineMarkdownToken[] = [];

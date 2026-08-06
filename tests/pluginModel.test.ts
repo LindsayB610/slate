@@ -1,11 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { describeSlateView, keepLatestSnapshot, parseInlineMarkdown, releaseIfDisposed, retainSelectedSource, shouldRefreshSource, sortTableRows, validateSourceMetadata } from "../src/pluginModel.js";
+import { describeSlateView, keepLatestSnapshot, parseInlineMarkdown, releaseIfDisposed, retainSelectedSource, shouldRefreshSource, slateHeadingTag, sortTableRows, validateSourceMetadata } from "../src/pluginModel.js";
 
 describe("Slate plugin refresh boundary", () => {
   it("describes each Slate-owned source view for the source picker", () => {
     expect(describeSlateView("markdown-tabs")).toEqual({ glyph: "☷", description: "Tabbed Markdown reference" });
     expect(describeSlateView("markdown")).toEqual({ glyph: "≡", description: "Markdown reference" });
     expect(describeSlateView("table")).toEqual({ glyph: "▦", description: "Sortable table" });
+  });
+
+  it("preserves Markdown heading hierarchy beneath Slate's page title", () => {
+    expect(slateHeadingTag(1)).toBe("h2");
+    expect(slateHeadingTag(2)).toBe("h3");
+    expect(slateHeadingTag(3)).toBe("h4");
+    expect(slateHeadingTag(6)).toBe("h4");
   });
 
   it("accepts only unique Slate-owned source metadata and supported views", () => {
