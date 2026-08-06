@@ -7,6 +7,11 @@ describe("Slate presentation models", () => {
     expect(tabs.map((tab) => [tab.label, tab.sections.length])).toEqual([["Projects", 2], ["Home", 1]]);
   });
 
+  it("keeps a section emoji in its visible tab label", () => {
+    const [tab] = buildTopLevelTabs(parseMarkdownSections("# 🎨 Creative\n## Current state\n- Sketch"));
+    expect(tab.label).toBe("🎨 Creative");
+  });
+
   it("preserves simple Markdown sections without imposing tabs", () => {
     expect(parseMarkdownSections("# Notes\nKeep this nearby.")[0]).toMatchObject({ heading: "Notes", paragraphs: ["Keep this nearby."] });
   });

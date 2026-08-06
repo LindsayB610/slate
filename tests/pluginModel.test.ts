@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { keepLatestSnapshot, releaseIfDisposed, shouldRefreshSource, validateSourceMetadata } from "../src/pluginModel.js";
+import { describeSlateView, keepLatestSnapshot, parseInlineMarkdown, releaseIfDisposed, retainSelectedSource, shouldRefreshSource, sortTableRows, validateSourceMetadata } from "../src/pluginModel.js";
 
 describe("Slate plugin refresh boundary", () => {
+  it("describes each Slate-owned source view for the source picker", () => {
+    expect(describeSlateView("markdown-tabs")).toEqual({ glyph: "☷", description: "Tabbed Markdown reference" });
+    expect(describeSlateView("markdown")).toEqual({ glyph: "≡", description: "Markdown reference" });
+    expect(describeSlateView("table")).toEqual({ glyph: "▦", description: "Sortable table" });
+  });
+
   it("accepts only unique Slate-owned source metadata and supported views", () => {
     expect(validateSourceMetadata([{ id: "tasks", label: "Tasks", view: "markdown" }])).toEqual([{ id: "tasks", label: "Tasks", view: "markdown" }]);
     expect(validateSourceMetadata([{ id: "tasks", label: "Tasks", view: "unknown" }])).toBeNull();
@@ -12,6 +18,13 @@ describe("Slate plugin refresh boundary", () => {
     expect(shouldRefreshSource("/private/slate/", { root: "/private/slate", configFile: "slate.config.json", source: "tasks" }, "slate.config.json")).toBe(true);
     expect(shouldRefreshSource("/private/slate", { root: "/private/other", configFile: "slate.config.json", source: "tasks" }, "slate.config.json")).toBe(false);
     expect(shouldRefreshSource("/private/slate", { root: "/private/slate", configFile: "other.json", source: "tasks" }, "slate.config.json")).toBe(false);
+  });
+
+  it("returns to the source picker when a selected source is removed", () => {
+    const sources = [{ id: "tasks", label: "Tasks", view: "markdown" as const }];
+    expect(retainSelectedSource("tasks", sources)).toBe("tasks");
+    expect(retainSelectedSource("gone", sources)).toBeUndefined();
+    expect(retainSelectedSource(undefined, sources)).toBeUndefined();
   });
 
   it("keeps the last good source through a failed read and ignores stale atomic-save reads", () => {
@@ -27,5 +40,23 @@ describe("Slate plugin refresh boundary", () => {
     expect(released).toBe(1);
     expect(releaseIfDisposed(false, () => { released += 1; })).toBe(false);
     expect(released).toBe(1);
+  });
+});
+
+describe("Slate table sorting", () => {
+  it("sorts values naturally in both directions without mutating the input", () => {
+    const rows = [["Item 10"], ["item 2"], ["Item 1"]];
+    expect(sortTableRows(rows, 0, "ascending")).toEqual([["Item 1"], ["item 2"], ["Item 10"]]);
+    expect(sortTableRows(rows, 0, "descending")).toEqual([["Item 10"], ["item 2"], ["Item 1"]]);
+    expect(rows).toEqual([["Item 10"], ["item 2"], ["Item 1"]]);
+  });
+});
+
+describe("Slate inline Markdown", () => {
+  it("renders bold text and safe links while leaving unsafe links as text", () => {
+    expect(parseInlineMarkdown("Read **this** and [visit](https://example.com).")).toEqual([
+      { type: "text", value: "Read " }, { type: "strong", value: "this" }, { type: "text", value: " and " }, { type: "link", label: "visit", href: "https://example.com" }, { type: "text", value: "." },
+    ]);
+    expect(parseInlineMarkdown("[bad](javascript:alert)")).toEqual([{ type: "text", value: "[bad](javascript:alert)" }]);
   });
 });

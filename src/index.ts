@@ -137,7 +137,7 @@ export function buildTopLevelTabs(sections: MarkdownSection[]): MarkdownTab[] {
   let current: MarkdownTab | undefined;
   for (const section of sections) {
     if (section.level === 1) {
-      current = { id: `${tabs.length}-${section.heading}`, label: stripLeadingEmoji(section.heading), sections: [section] };
+      current = { id: `${tabs.length}-${section.heading}`, label: section.heading, sections: [section] };
       tabs.push(current);
     } else if (current) {
       current.sections.push(section);
@@ -171,10 +171,6 @@ function isSourceDefinition(value: unknown): value is SlateSourceDefinition {
     typeof source.path === "string" && /^\/(?!.*(?:^|\/)\.\.(?:\/|$)).+\.md$/.test(source.path) &&
     typeof source.view === "string" && (slateViewFormats as readonly string[]).includes(source.view),
   );
-}
-
-function stripLeadingEmoji(value: string): string {
-  return value.replace(/^[^\p{L}\p{N}]+/u, "");
 }
 
 function isTableSeparator(line: string): boolean {
