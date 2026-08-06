@@ -15,4 +15,10 @@ describe("Slate presentation models", () => {
     expect(parseMarkdownTable("# Inventory\n\n| Item | Count | Location |\n| --- | --- | --- |\n| Tea | 2 | Shelf |"))
       .toEqual({ headers: ["Item", "Count", "Location"], rows: [["Tea", "2", "Shelf"]] });
   });
+
+  it("treats Markdown link and HTML syntax as text rather than executable markup", () => {
+    const section = parseMarkdownSections("# Notes\n[bad](javascript:alert(1)) <img src=x onerror=alert(1)>")[0];
+    expect(section.paragraphs[0]).toContain("javascript:");
+    expect(section.paragraphs[0]).toContain("<img");
+  });
 });
