@@ -35,6 +35,20 @@ export type MarkdownTable = {
   rows: string[][];
 };
 
+export type SlatePluginManifest = {
+  id: "slate";
+  displayName: "Slate";
+  configFile: "slate.config.json";
+  hostCapabilities: ["read-configured-markdown", "watch-configured-markdown"];
+};
+
+export const slatePluginManifest: SlatePluginManifest = {
+  id: "slate",
+  displayName: "Slate",
+  configFile: "slate.config.json",
+  hostCapabilities: ["read-configured-markdown", "watch-configured-markdown"],
+};
+
 export function parseSlateConfig(contents: string): SlateConfigResult {
   let value: unknown;
   try {

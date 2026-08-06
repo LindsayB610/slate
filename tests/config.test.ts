@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseSlateConfig } from "../src/index.js";
+import { parseSlateConfig, slatePluginManifest } from "../src/index.js";
 
 describe("Slate configuration", () => {
   it("accepts any number of uniquely identified local Markdown sources in the supported view formats", () => {
@@ -22,5 +22,16 @@ describe("Slate configuration", () => {
     ["relative path", { version: 1, sources: [{ id: "one", label: "One", path: "one.md", view: "markdown" }] }]
   ])("rejects %s", (_label, value) => {
     expect(parseSlateConfig(JSON.stringify(value))).toMatchObject({ ok: false });
+  });
+});
+
+describe("Slate plugin contract", () => {
+  it("declares its own configuration file and only generic host capabilities", () => {
+    expect(slatePluginManifest).toEqual({
+      id: "slate",
+      displayName: "Slate",
+      configFile: "slate.config.json",
+      hostCapabilities: ["read-configured-markdown", "watch-configured-markdown"],
+    });
   });
 });
