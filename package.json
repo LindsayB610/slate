@@ -1,0 +1,17 @@
+{
+  "name": "slate-core",
+  "version": "0.1.0",
+  "description": "Generic local-first Markdown source definitions and presentation models for Workshop.",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.6"
+  }
+}
