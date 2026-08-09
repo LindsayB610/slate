@@ -40,14 +40,14 @@ export type SlatePluginManifest = {
   id: "slate";
   displayName: "Slate";
   configFile: "slate.config.json";
-  hostCapabilities: ["read-configured-markdown", "watch-configured-markdown"];
+  hostCapabilities: ["read-configured-markdown", "watch-configured-markdown", "open_external_url"];
 };
 
 export const slatePluginManifest: SlatePluginManifest = {
   id: "slate",
   displayName: "Slate",
   configFile: "slate.config.json",
-  hostCapabilities: ["read-configured-markdown", "watch-configured-markdown"],
+  hostCapabilities: ["read-configured-markdown", "watch-configured-markdown", "open_external_url"],
 };
 
 /**
@@ -67,6 +67,7 @@ export const workshopPluginDeclaration = {
   ],
   navigationMode: "plugin" as const,
   requiredLocalCapabilities: ["local-workspace"] as const,
+  optionalHostCapabilities: ["open_external_url"] as const,
   dataRoots: [] as string[],
   importActions: [] as string[],
   exportActions: [] as string[],

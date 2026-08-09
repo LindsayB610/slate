@@ -14,6 +14,15 @@ capabilities `read_configured_markdown_sources`,
 `read_configured_markdown_source`, and `start_configured_markdown_watch`.
 It has peer dependencies on React and `@tauri-apps/api`.
 
+### External links
+
+Slate accepts safe `http`, `https`, and `mailto` links in configured Markdown.
+In a browser preview, those links behave as ordinary browser links. In Workshop,
+Slate uses the optional generic `open_external_url` host capability to hand the
+link to the operating system's default handler. Slate does not bundle a Tauri
+opener plugin. If an older Workshop install does not provide that capability,
+Slate shows an update message instead of opening a dead webview tab.
+
 ## Configuration
 
 Each person keeps their filled-in configuration outside this repository and

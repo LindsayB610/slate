@@ -3,9 +3,9 @@ import { listen } from "@tauri-apps/api/event";
 import * as ScrollAreaPrimitive from "@radix-ui/react-scroll-area";
 import * as TabsPrimitive from "@radix-ui/react-tabs";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type MouseEvent } from "react";
 import { parseMarkdownSections, parseMarkdownTable, splitTabbedDocument, type SlateSourceDefinition } from "./index.js";
-import { describeSlateView, keepLatestSnapshot, parseInlineMarkdown, releaseIfDisposed, retainSelectedSource, shouldRefreshSource, slateDemoSnapshots, slateDemoSources, slateHeadingTag, sortTableRows, validateSourceMetadata, type SlateSnapshot, type SlateSourceChange, type TableSortDirection } from "./pluginModel.js";
+import { describeSlateView, isSlateTauriRuntime, keepLatestSnapshot, openSlateExternalUrl, parseInlineMarkdown, releaseIfDisposed, retainSelectedSource, shouldRefreshSource, slateDemoSnapshots, slateDemoSources, slateHeadingTag, slateLinkTarget, sortTableRows, validateSourceMetadata, type SlateSnapshot, type SlateSourceChange, type TableSortDirection } from "./pluginModel.js";
 
 type Source = Pick<SlateSourceDefinition, "id" | "label" | "view">;
 const configFile = "slate.config.json";
@@ -30,7 +30,8 @@ function SortableTable({ contents }: { contents: string }) { const table = parse
 function Tabs({ sections }: { sections: ReturnType<typeof parseMarkdownSections> }) { const { intro, tabs } = splitTabbedDocument(sections); if (!tabs.length) return <Sections sections={intro} />; return <>{intro.length ? <div className="slate-plugin-tab-intro"><Sections sections={intro} /></div> : null}<TabsPrimitive.Root defaultValue={tabs[0].id}><TabsPrimitive.List className="slate-plugin-tabs" aria-label="Document sections">{tabs.map((item) => <TabsPrimitive.Trigger key={item.id} value={item.id}>{item.label}</TabsPrimitive.Trigger>)}</TabsPrimitive.List>{tabs.map((item) => <TabsPrimitive.Content key={item.id} value={item.id}><Sections sections={item.sections} /></TabsPrimitive.Content>)}</TabsPrimitive.Root></>; }
 function Sections({ sections }: { sections: ReturnType<typeof parseMarkdownSections> }) { return <div className="slate-plugin-content">{sections.map((section, index) => <Section key={`${section.heading}-${index}`} section={section} />)}</div>; }
 function Section({ section }: { section: ReturnType<typeof parseMarkdownSections>[number] }) { const Heading = slateHeadingTag(section.level); const className = section.level === 1 ? "slate-plugin-main-heading" : section.level === 2 ? "slate-plugin-subheading" : "slate-plugin-minor-heading"; return <section><Heading className={className}><InlineMarkdown value={section.heading} /></Heading>{section.paragraphs.map((paragraph, item) => <p key={item}><InlineMarkdown value={paragraph} /></p>)}{section.items.length ? <ul>{section.items.map((item, itemIndex) => <li key={itemIndex}><InlineMarkdown value={item} /></li>)}</ul> : null}</section>; }
-function InlineMarkdown({ value }: { value: string }) { return <>{parseInlineMarkdown(value).map((token, index) => token.type === "strong" ? <strong key={index}>{token.value}</strong> : token.type === "link" ? <a key={index} href={token.href} rel="noreferrer" target="_blank">{token.label}</a> : <span key={index}>{token.value}</span>)}</>; }
+function InlineMarkdown({ value }: { value: string }) { return <>{parseInlineMarkdown(value).map((token, index) => token.type === "strong" ? <strong key={index}>{token.value}</strong> : token.type === "link" ? <SlateExternalLink key={index} href={token.href}>{token.label}</SlateExternalLink> : <span key={index}>{token.value}</span>)}</>; }
+function SlateExternalLink({ href, children }: { href: string; children: string }) { const browser = typeof window === "undefined" ? undefined : window; const tauri = isSlateTauriRuntime(browser); const [error, setError] = useState<string>(); const open = async (event: MouseEvent<HTMLAnchorElement>) => { if (!tauri) return; event.preventDefault(); const message = await openSlateExternalUrl(href, (command, args) => invoke(command, args)); setError(message); }; return <><a href={href} onClick={open} rel="noreferrer" target={slateLinkTarget(browser)}>{children}</a>{error ? <span className="slate-plugin-link-error" role="alert">{error}</span> : null}</>; }
 function SlateStyles() { return <style>{`
   .slate-plugin{color:#f6f3f4;max-width:1040px;padding:4px 0 96px;font:14px/1.55 Inter,ui-sans-serif,system-ui,sans-serif}
   .slate-plugin h1{font-size:32px;line-height:1.1;margin:2px 0 0;letter-spacing:-.03em}
@@ -66,6 +67,7 @@ function SlateStyles() { return <style>{`
   .slate-plugin-content p{color:#d1cdd1;margin:0 0 7px}
   .slate-plugin a{color:#ffe500;text-decoration-color:rgba(255,229,0,.55);text-underline-offset:2px}
   .slate-plugin a:hover{color:#f81b8f;text-decoration-color:#f81b8f}
+  .slate-plugin-link-error{color:#ff79b9;display:block;font-size:12px;margin-top:4px}
   .slate-plugin-content ul{list-style:none;margin:5px 0 0;padding-left:18px}
   .slate-plugin-content li{margin:3px 0;position:relative}
   .slate-plugin-content ul li::before{color:#8e898f;content:"–";left:-15px;position:absolute}

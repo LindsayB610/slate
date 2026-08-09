@@ -4,6 +4,26 @@ export type SlateSourceMetadata = Pick<SlateSourceDefinition, "id" | "label" | "
 export type SlateSnapshot = { contents: string; updatedAt: number };
 export type SlateSourceChange = { root: string; configFile: string; source: string };
 export type InlineMarkdownToken = { type: "text"; value: string } | { type: "strong"; value: string } | { type: "link"; label: string; href: string };
+export type ExternalUrlInvoker = (command: "open_external_url", args: { url: string }) => Promise<unknown>;
+
+export const externalLinkFailureMessage = "Slate couldn't open this link. Update Workshop, then try again.";
+
+export function isSlateTauriRuntime(browser: unknown): boolean {
+  return Boolean(browser && typeof browser === "object" && "__TAURI_INTERNALS__" in browser);
+}
+
+export function slateLinkTarget(browser: unknown): "_blank" | undefined {
+  return isSlateTauriRuntime(browser) ? undefined : "_blank";
+}
+
+export async function openSlateExternalUrl(url: string, invokeExternalUrl: ExternalUrlInvoker): Promise<string | undefined> {
+  try {
+    await invokeExternalUrl("open_external_url", { url });
+    return undefined;
+  } catch {
+    return externalLinkFailureMessage;
+  }
+}
 
 /** Offsets Markdown heading levels under Slate's own page title without flattening them. */
 export function slateHeadingTag(level: number): "h2" | "h3" | "h4" {

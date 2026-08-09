@@ -31,7 +31,7 @@ describe("Slate plugin contract", () => {
       id: "slate",
       displayName: "Slate",
       configFile: "slate.config.json",
-      hostCapabilities: ["read-configured-markdown", "watch-configured-markdown"],
+      hostCapabilities: ["read-configured-markdown", "watch-configured-markdown", "open_external_url"],
     });
   });
 

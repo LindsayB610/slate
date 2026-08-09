@@ -1,5 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
 import { WorkshopToolView, workshopPluginDeclaration } from "../src/index.js";
 import { slateDemoSnapshots } from "../src/pluginModel.js";
 import { buildTopLevelTabs, parseMarkdownSections, parseMarkdownTable } from "../src/index.js";
@@ -13,6 +14,7 @@ describe("Slate Workshop plugin surface", () => {
       status: "ready",
       privateWorkspace: { requiredFields: ["slate.config.json"] },
       requiredLocalCapabilities: ["local-workspace"],
+      optionalHostCapabilities: ["open_external_url"],
     });
   });
 
@@ -32,5 +34,10 @@ describe("Slate Workshop plugin surface", () => {
     const markup = renderToStaticMarkup(<WorkshopToolView requestWorkspaceRoot={() => undefined} />);
     expect(markup).toContain("slate-plugin-main-heading");
     expect(markup).toContain("slate-plugin-subheading");
+  });
+
+  it("does not bundle a Tauri opener plugin", () => {
+    const packageJson = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as { dependencies?: Record<string, string>; devDependencies?: Record<string, string> };
+    expect({ ...packageJson.dependencies, ...packageJson.devDependencies }).not.toHaveProperty("@tauri-apps/plugin-opener");
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { describeSlateView, keepLatestSnapshot, parseInlineMarkdown, releaseIfDisposed, retainSelectedSource, shouldRefreshSource, slateHeadingTag, sortTableRows, validateSourceMetadata } from "../src/pluginModel.js";
+import { describeSlateView, externalLinkFailureMessage, isSlateTauriRuntime, keepLatestSnapshot, openSlateExternalUrl, parseInlineMarkdown, releaseIfDisposed, retainSelectedSource, shouldRefreshSource, slateHeadingTag, slateLinkTarget, sortTableRows, validateSourceMetadata } from "../src/pluginModel.js";
 
 describe("Slate plugin refresh boundary", () => {
   it("describes each Slate-owned source view for the source picker", () => {
@@ -65,5 +65,20 @@ describe("Slate inline Markdown", () => {
       { type: "text", value: "Read " }, { type: "strong", value: "this" }, { type: "text", value: " and " }, { type: "link", label: "visit", href: "https://example.com" }, { type: "text", value: "." },
     ]);
     expect(parseInlineMarkdown("[bad](javascript:alert)")).toEqual([{ type: "text", value: "[bad](javascript:alert)" }]);
+  });
+});
+
+describe("Slate external links", () => {
+  it("uses the native host only inside Tauri", () => {
+    expect(isSlateTauriRuntime({})).toBe(false);
+    expect(isSlateTauriRuntime({ __TAURI_INTERNALS__: {} })).toBe(true);
+    expect(slateLinkTarget({})).toBe("_blank");
+    expect(slateLinkTarget({ __TAURI_INTERNALS__: {} })).toBeUndefined();
+  });
+
+  it("invokes Workshop's generic opener and returns a visible failure message", async () => {
+    const open = async () => undefined;
+    expect(await openSlateExternalUrl("https://example.com", open)).toBeUndefined();
+    expect(await openSlateExternalUrl("https://example.com", async () => { throw new Error("Older Workshop"); })).toBe(externalLinkFailureMessage);
   });
 });
