@@ -36,6 +36,12 @@ describe("Slate Workshop plugin surface", () => {
     expect(markup).toContain("slate-plugin-subheading");
   });
 
+  it("uses a responsive three-column source grid once Slate has six sources", () => {
+    const pluginSource = readFileSync(new URL("../src/plugin.tsx", import.meta.url), "utf8");
+    expect(pluginSource).toContain(".slate-plugin-sources:has(> :nth-child(6)){display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}");
+    expect(pluginSource).toContain(".slate-plugin-sources:has(> :nth-child(6)){grid-template-columns:repeat(2,minmax(0,1fr))}");
+  });
+
   it("does not bundle a Tauri opener plugin", () => {
     const packageJson = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as { dependencies?: Record<string, string>; devDependencies?: Record<string, string> };
     expect({ ...packageJson.dependencies, ...packageJson.devDependencies }).not.toHaveProperty("@tauri-apps/plugin-opener");

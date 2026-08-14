@@ -41,6 +41,7 @@ function SlateStyles() { return <style>{`
   .slate-plugin-header p{color:#f81b8f;font-size:14px;font-weight:800;margin:0 0 4px;text-transform:uppercase;letter-spacing:.08em}
   .slate-plugin button{background:#171719;border:1px solid #454147;border-radius:7px;color:#f6f3f4;cursor:pointer;padding:7px 11px;font:inherit}
   .slate-plugin-sources{display:flex;flex-wrap:wrap;gap:10px;margin:14px 0 20px}
+  .slate-plugin-sources:has(> :nth-child(6)){display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}
   .slate-plugin-sources button{align-items:center;background:rgba(255,255,255,.025);display:flex;flex:1 1 192px;gap:11px;min-width:0;padding:12px 13px;text-align:left}
   .slate-plugin-sources button:hover{background:rgba(248,27,143,.08);border-color:#f81b8f}
   .slate-plugin-source-glyph{color:#f81b8f;font-size:22px;line-height:1}
@@ -88,4 +89,6 @@ function SlateStyles() { return <style>{`
   .slate-plugin-tooltip-arrow{fill:#f6f3f4}
   .slate-plugin-error{color:#ff79b9}
   .slate-plugin-demo{color:#aaa7ab;font-size:12px;margin:14px 0 0}
+  @media (max-width:760px){.slate-plugin-sources:has(> :nth-child(6)){grid-template-columns:repeat(2,minmax(0,1fr))}}
+  @media (max-width:520px){.slate-plugin-sources:has(> :nth-child(6)){grid-template-columns:1fr}}
 `}</style>; }
