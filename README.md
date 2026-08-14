@@ -75,6 +75,16 @@ Supported views:
   top-level-heading tab. Tables are never selected from another tab. A tab with
   no valid table shows an in-place message instead of failing the document.
 
+### Favorites and source order
+
+Slate alphabetizes source cards by their visible labels. A user can toggle the
+star in the upper-right corner of any source card to place it in a Favorites
+section above the remaining documents; both sections remain alphabetized.
+When no source is starred, Slate shows only the normal source grid—there is no
+empty Favorites section. Favorites are a Slate-local preference scoped to the
+selected private workspace. They do not modify `slate.config.json`, Markdown
+files, or Workshop, and they do not sync across computers.
+
 ## Privacy model
 
 Slate stores no source content. The host may read only the absolute paths that

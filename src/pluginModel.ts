@@ -5,6 +5,7 @@ export type SlateSnapshot = { contents: string; updatedAt: number };
 export type SlateSourceChange = { root: string; configFile: string; source: string };
 export type InlineMarkdownToken = { type: "text"; value: string } | { type: "strong"; value: string } | { type: "link"; label: string; href: string };
 export type ExternalUrlInvoker = (command: "open_external_url", args: { url: string }) => Promise<unknown>;
+export type SlatePreferenceStorage = Pick<Storage, "getItem" | "setItem">;
 
 export const externalLinkFailureMessage = "Slate couldn't open this link. Update Workshop, then try again.";
 
@@ -60,6 +61,9 @@ export const slateDemoSources: SlateSourceMetadata[] = [
   { id: "tasks", label: "Tasks", view: "markdown-tabs" },
   { id: "notes", label: "Notes", view: "markdown" },
   { id: "inventory", label: "Inventory", view: "table" },
+  { id: "archive", label: "Archive", view: "markdown" },
+  { id: "ideas", label: "Ideas", view: "markdown-tabs" },
+  { id: "reports", label: "Reports", view: "table-tabs" },
 ];
 
 export const slateDemoSnapshots: Record<string, SlateSnapshot> = {
@@ -166,7 +170,56 @@ Keep external links descriptive and limited to trusted destinations, like the [r
 | First aid | Bandages | 1 box | Hall cabinet | Check sizes |
 | First aid | Cold pack | 2 | Hall cabinet | |
 | Office | Printer paper | 1 ream | Desk cabinet | Buy one backup |` },
+  archive: { updatedAt: Date.parse("2026-08-05T18:45:00-07:00"), contents: `# Archive
+Keep completed work and useful reference material here.` },
+  ideas: { updatedAt: Date.parse("2026-08-05T18:45:00-07:00"), contents: `# ✨ Ideas
+## Next up
+- Explore the strongest concept
+
+# 📌 Saved
+## Worth revisiting
+- Keep this one for a quieter week` },
+  reports: { updatedAt: Date.parse("2026-08-05T18:45:00-07:00"), contents: `# Weekly reports
+---
+# August 5
+| Topic | Score |
+| --- | ---: |
+| Content strategy | 71 |` },
 };
+
+const favoriteStoragePrefix = "slate.favorite-source-ids.v1:";
+
+/** Slate-owned UI preference; config and Markdown files remain read-only. */
+export function slateFavoriteStorageKey(workspaceRoot: string): string {
+  return `${favoriteStoragePrefix}${normalizeRoot(workspaceRoot)}`;
+}
+
+export function loadSlateFavoriteSourceIds(storage: SlatePreferenceStorage | undefined, workspaceRoot: string): string[] {
+  if (!storage || !workspaceRoot) return [];
+  try {
+    const parsed: unknown = JSON.parse(storage.getItem(slateFavoriteStorageKey(workspaceRoot)) ?? "[]");
+    return Array.isArray(parsed) ? [...new Set(parsed.filter((id): id is string => typeof id === "string" && /^[a-z0-9][a-z0-9-]*$/.test(id)))] : [];
+  } catch { return []; }
+}
+
+export function saveSlateFavoriteSourceIds(storage: SlatePreferenceStorage | undefined, workspaceRoot: string, favoriteIds: string[]): void {
+  if (!storage || !workspaceRoot) return;
+  try { storage.setItem(slateFavoriteStorageKey(workspaceRoot), JSON.stringify([...new Set(favoriteIds)])); } catch { /* Preferences are optional. */ }
+}
+
+export function toggleSlateFavoriteSourceId(favoriteIds: string[], sourceId: string): string[] {
+  return favoriteIds.includes(sourceId) ? favoriteIds.filter((id) => id !== sourceId) : [...favoriteIds, sourceId];
+}
+
+/** Presents each configured source exactly once, alphabetized within its current shelf. */
+export function partitionSlateSources(sources: SlateSourceMetadata[], favoriteIds: string[]): { favorites: SlateSourceMetadata[]; documents: SlateSourceMetadata[] } {
+  const favorites = new Set(favoriteIds);
+  const sort = (left: SlateSourceMetadata, right: SlateSourceMetadata) => left.label.localeCompare(right.label, undefined, { numeric: true, sensitivity: "base" }) || left.id.localeCompare(right.id);
+  return {
+    favorites: sources.filter((source) => favorites.has(source.id)).sort(sort),
+    documents: sources.filter((source) => !favorites.has(source.id)).sort(sort),
+  };
+}
 
 export function validateSourceMetadata(value: unknown): SlateSourceMetadata[] | null {
   if (!Array.isArray(value) || value.length === 0) return null;

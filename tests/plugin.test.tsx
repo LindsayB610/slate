@@ -38,8 +38,17 @@ describe("Slate Workshop plugin surface", () => {
 
   it("uses a responsive three-column source grid once Slate has six sources", () => {
     const pluginSource = readFileSync(new URL("../src/plugin.tsx", import.meta.url), "utf8");
-    expect(pluginSource).toContain(".slate-plugin-sources:has(> :nth-child(6)){display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}");
-    expect(pluginSource).toContain(".slate-plugin-sources:has(> :nth-child(6)){grid-template-columns:repeat(2,minmax(0,1fr))}");
+    expect(pluginSource).toContain(".slate-plugin-sources{display:grid;gap:10px;grid-template-columns:repeat(3,minmax(0,1fr))}");
+    expect(pluginSource).toContain("@media (max-width:760px){.slate-plugin-sources{grid-template-columns:repeat(2,minmax(0,1fr))}}");
+    expect(pluginSource).toContain("@media (max-width:520px){.slate-plugin-sources{grid-template-columns:1fr}}");
+  });
+
+  it("renders a dedicated favorite control and omits an empty Favorites shelf", () => {
+    const pluginSource = readFileSync(new URL("../src/plugin.tsx", import.meta.url), "utf8");
+    expect(pluginSource).toContain("Add ${source.label} to favorites");
+    expect(pluginSource).toContain("Remove ${source.label} from favorites");
+    expect(pluginSource).toContain("groups.favorites.length ? <SourceGroup label=\"Favorites\"");
+    expect(pluginSource).not.toContain("No favorites yet");
   });
 
   it("does not bundle a Tauri opener plugin", () => {

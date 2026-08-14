@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { describeSlateView, externalLinkFailureMessage, isSlateTauriRuntime, keepLatestSnapshot, openSlateExternalUrl, parseInlineMarkdown, releaseIfDisposed, retainSelectedSource, shouldRefreshSource, slateHeadingTag, slateLinkTarget, sortTableRows, validateSourceMetadata } from "../src/pluginModel.js";
+import { describeSlateView, externalLinkFailureMessage, isSlateTauriRuntime, keepLatestSnapshot, loadSlateFavoriteSourceIds, openSlateExternalUrl, parseInlineMarkdown, partitionSlateSources, releaseIfDisposed, retainSelectedSource, saveSlateFavoriteSourceIds, shouldRefreshSource, slateFavoriteStorageKey, slateHeadingTag, slateLinkTarget, sortTableRows, toggleSlateFavoriteSourceId, validateSourceMetadata } from "../src/pluginModel.js";
 
 describe("Slate plugin refresh boundary", () => {
   it("describes each Slate-owned source view for the source picker", () => {
@@ -57,6 +57,45 @@ describe("Slate table sorting", () => {
     expect(sortTableRows(rows, 0, "ascending")).toEqual([["Item 1"], ["item 2"], ["Item 10"]]);
     expect(sortTableRows(rows, 0, "descending")).toEqual([["Item 10"], ["item 2"], ["Item 1"]]);
     expect(rows).toEqual([["Item 10"], ["item 2"], ["Item 1"]]);
+  });
+});
+
+describe("Slate source favorites", () => {
+  const sources = [
+    { id: "zeta", label: "Zeta", view: "markdown" as const },
+    { id: "bravo", label: "Bravo 10", view: "table" as const },
+    { id: "alpha", label: "Alpha 2", view: "markdown-tabs" as const },
+    { id: "bravo-2", label: "Bravo 2", view: "table-tabs" as const },
+  ];
+
+  it("alphabetizes favorites and remaining documents without duplication", () => {
+    expect(partitionSlateSources(sources, ["zeta", "bravo-2"])).toEqual({
+      favorites: [sources[3], sources[0]],
+      documents: [sources[2], sources[1]],
+    });
+  });
+
+  it("drops stale favorites so an empty favorites shelf is never rendered", () => {
+    expect(partitionSlateSources(sources, ["removed"])).toEqual({
+      favorites: [],
+      documents: [sources[2], sources[3], sources[1], sources[0]],
+    });
+  });
+
+  it("toggles favorite ids without changing source configuration", () => {
+    expect(toggleSlateFavoriteSourceId(["zeta"], "alpha")).toEqual(["zeta", "alpha"]);
+    expect(toggleSlateFavoriteSourceId(["zeta", "alpha"], "alpha")).toEqual(["zeta"]);
+  });
+
+  it("persists only favorite ids per normalized workspace and survives corrupt storage", () => {
+    const values = new Map<string, string>();
+    const storage = { getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => { values.set(key, value); } };
+    const key = slateFavoriteStorageKey("/private/slate/");
+    saveSlateFavoriteSourceIds(storage, "/private/slate/", ["alpha", "zeta"]);
+    expect(key).toBe(slateFavoriteStorageKey("/private/slate"));
+    expect(loadSlateFavoriteSourceIds(storage, "/private/slate")).toEqual(["alpha", "zeta"]);
+    values.set(key, "not json");
+    expect(loadSlateFavoriteSourceIds(storage, "/private/slate")).toEqual([]);
   });
 });
 
