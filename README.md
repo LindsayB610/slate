@@ -41,6 +41,19 @@ data remain untouched. Slate never scans the folder or creates configuration
 for you: it reads only the Markdown files explicitly declared in that
 configuration.
 
+### Adding and changing displayed documents
+
+Slate reads the `sources` array in your private `slate.config.json`. To add,
+change, or remove a displayed document, edit that file in a text editor, save
+it, and Slate will reload the configured source list. Each source needs a
+unique lowercase, hyphenated `id`, a human-readable `label`, an absolute
+Markdown `path`, and a supported `view`.
+
+Slate does not yet provide a screen for editing this configuration. That is
+deliberate: it never creates files or discovers nearby documents. A future
+configuration editor would need a separately designed, narrowly permissioned
+host write capability rather than quietly widening Slate's file access.
+
 ```json
 {
   "version": 1,
