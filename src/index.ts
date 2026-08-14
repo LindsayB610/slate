@@ -44,14 +44,14 @@ export type SlatePluginManifest = {
   id: "slate";
   displayName: "Slate";
   configFile: "slate.config.json";
-  hostCapabilities: ["read-configured-markdown", "watch-configured-markdown", "open_external_url"];
+  hostCapabilities: ["read-configured-markdown", "watch-configured-markdown", "manage-configured-markdown", "open_external_url"];
 };
 
 export const slatePluginManifest: SlatePluginManifest = {
   id: "slate",
   displayName: "Slate",
   configFile: "slate.config.json",
-  hostCapabilities: ["read-configured-markdown", "watch-configured-markdown", "open_external_url"],
+  hostCapabilities: ["read-configured-markdown", "watch-configured-markdown", "manage-configured-markdown", "open_external_url"],
 };
 
 /**
@@ -71,7 +71,7 @@ export const workshopPluginDeclaration = {
   ],
   navigationMode: "plugin" as const,
   requiredLocalCapabilities: ["local-workspace"] as const,
-  optionalHostCapabilities: ["open_external_url"] as const,
+  optionalHostCapabilities: ["configured_markdown_config_management", "open_external_url"] as const,
   dataRoots: [] as string[],
   importActions: [] as string[],
   exportActions: [] as string[],
@@ -95,8 +95,8 @@ export function parseSlateConfig(contents: string): SlateConfigResult {
   }
 
   const config = value as Partial<SlateConfig>;
-  if (config.version !== 1 || !Array.isArray(config.sources) || !config.sources.length) {
-    return { ok: false, message: "Slate configuration requires version 1 and at least one source." };
+  if (config.version !== 1 || !Array.isArray(config.sources)) {
+    return { ok: false, message: "Slate configuration requires version 1 and a sources array." };
   }
 
   const sources: SlateSourceDefinition[] = [];

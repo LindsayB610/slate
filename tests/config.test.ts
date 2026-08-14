@@ -15,8 +15,11 @@ describe("Slate configuration", () => {
     }))).toMatchObject({ ok: true, config: { version: 1, sources: expect.arrayContaining([expect.objectContaining({ id: "archive", view: "table-tabs" })]) } });
   });
 
+  it("allows an empty private source list so a user can remove the last document safely", () => {
+    expect(parseSlateConfig(JSON.stringify({ version: 1, sources: [] }))).toMatchObject({ ok: true, config: { sources: [] } });
+  });
+
   it.each([
-    ["no sources", { version: 1, sources: [] }],
     ["duplicate ids", { version: 1, sources: [{ id: "same", label: "One", path: "/private/one.md", view: "markdown" }, { id: "same", label: "Two", path: "/private/two.md", view: "table" }] }],
     ["duplicate paths", { version: 1, sources: [{ id: "one", label: "One", path: "/private/shared.md", view: "markdown" }, { id: "two", label: "Two", path: "/private/shared.md", view: "table" }] }],
     ["unsupported view", { version: 1, sources: [{ id: "one", label: "One", path: "/private/one.md", view: "html" }] }],
@@ -32,7 +35,7 @@ describe("Slate plugin contract", () => {
       id: "slate",
       displayName: "Slate",
       configFile: "slate.config.json",
-      hostCapabilities: ["read-configured-markdown", "watch-configured-markdown", "open_external_url"],
+      hostCapabilities: ["read-configured-markdown", "watch-configured-markdown", "manage-configured-markdown", "open_external_url"],
     });
   });
 

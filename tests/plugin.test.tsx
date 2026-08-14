@@ -14,7 +14,7 @@ describe("Slate Workshop plugin surface", () => {
       status: "ready",
       privateWorkspace: { requiredFields: ["slate.config.json"] },
       requiredLocalCapabilities: ["local-workspace"],
-      optionalHostCapabilities: ["open_external_url"],
+      optionalHostCapabilities: ["configured_markdown_config_management", "open_external_url"],
     });
   });
 
@@ -67,6 +67,17 @@ describe("Slate Workshop plugin surface", () => {
     expect(pluginSource).toContain("Slate will forget this folder's path");
     expect(pluginSource).toContain("The folder and its Markdown files will not change");
     expect(pluginSource).toContain("clearWorkspaceRoot?.()");
+  });
+
+  it("owns a private, validated document manager without arbitrary filesystem access", () => {
+    const pluginSource = readFileSync(new URL("../src/plugin.tsx", import.meta.url), "utf8");
+    expect(pluginSource).toContain("Manage documents");
+    expect(pluginSource).toContain("read_configured_markdown_config");
+    expect(pluginSource).toContain("write_configured_markdown_config");
+    expect(pluginSource).toContain("Move up");
+    expect(pluginSource).toContain("Move down");
+    expect(pluginSource).toContain("Remove");
+    expect(pluginSource).toContain("Documents themselves are never edited");
   });
 
   it("gives a remembered but inaccessible folder a specific recovery path", () => {

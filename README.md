@@ -11,7 +11,9 @@ it provides the desktop frame, promotion state, and constrained local-source
 capabilities. Slate exports `workshopPluginDeclaration` and
 `WorkshopToolView`; it reads only declared sources through the generic host
 capabilities `read_configured_markdown_sources`,
-`read_configured_markdown_source`, and `start_configured_markdown_watch`.
+`read_configured_markdown_source`, `start_configured_markdown_watch`, and the
+optional, narrow configuration-management pair
+`read_configured_markdown_config` / `write_configured_markdown_config`.
 It has peer dependencies on React and `@tauri-apps/api`.
 
 ### External links
@@ -43,16 +45,18 @@ configuration.
 
 ### Adding and changing displayed documents
 
-Slate reads the `sources` array in your private `slate.config.json`. To add,
-change, or remove a displayed document, edit that file in a text editor, save
-it, and Slate will reload the configured source list. Each source needs a
-unique lowercase, hyphenated `id`, a human-readable `label`, an absolute
-Markdown `path`, and a supported `view`.
+Slate reads the `sources` array in your private `slate.config.json`. Use
+**Manage documents** in Slate to add, edit, remove, validate, and reorder that
+list without editing JSON. Save validates every id, label, view, duplicate
+path, and absolute Markdown path; Workshop then writes only the existing
+`slate.config.json` in the selected private folder. It will not create a
+configuration file, discover documents, or edit any Markdown file. A failed
+save leaves the draft visible with an error so it can be corrected or canceled.
 
-Slate does not yet provide a screen for editing this configuration. That is
-deliberate: it never creates files or discovers nearby documents. A future
-configuration editor would need a separately designed, narrowly permissioned
-host write capability rather than quietly widening Slate's file access.
+The manager permits an empty document list. That leaves Slate connected and
+shows its "No documents configured" state until a source is added again.
+Each source needs a unique lowercase, hyphenated `id`, a human-readable
+`label`, an absolute Markdown `path`, and a supported `view`.
 
 ```json
 {
@@ -102,7 +106,9 @@ Supported views:
 
 ### Favorites and source order
 
-Slate alphabetizes source cards by their visible labels. A user can toggle the
+Slate alphabetizes source cards by their visible labels. The manager’s order is
+preserved in the private configuration for intentional source ordering, while
+the picker continues to alphabetize the visible cards. A user can toggle the
 star in the upper-right corner of any source card to place it in a Favorites
 section above the remaining documents; both sections remain alphabetized.
 When no source is starred, Slate shows only the normal source grid—there is no
