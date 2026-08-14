@@ -69,6 +69,13 @@ describe("Slate Workshop plugin surface", () => {
     expect(pluginSource).toContain("clearWorkspaceRoot?.()");
   });
 
+  it("gives a remembered but inaccessible folder a specific recovery path", () => {
+    const pluginSource = readFileSync(new URL("../src/plugin.tsx", import.meta.url), "utf8");
+    expect(pluginSource).toContain("Workshop has access to it");
+    expect(pluginSource).toContain("Change Slate folder to try again");
+    expect(pluginSource).toContain("keep the last good view");
+  });
+
   it("does not bundle a Tauri opener plugin", () => {
     const packageJson = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as { dependencies?: Record<string, string>; devDependencies?: Record<string, string> };
     expect({ ...packageJson.dependencies, ...packageJson.devDependencies }).not.toHaveProperty("@tauri-apps/plugin-opener");
