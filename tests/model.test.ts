@@ -46,6 +46,16 @@ Short run summary.
       .toEqual({ headers: ["Item", "Count", "Location"], rows: [["Tea", "2", "Shelf"]] });
   });
 
+  it("keeps escaped pipes inside their table cell and renders their display value naturally", () => {
+    expect(parseMarkdownTable(`| Keyword | Note |
+| --- | --- |
+| content system \\| operating model | valid |`))
+      .toEqual({
+        headers: ["Keyword", "Note"],
+        rows: [["content system | operating model", "valid"]],
+      });
+  });
+
   it("selects the largest valid table when a file includes a small legend", () => {
     const table = parseMarkdownTable(`| State | Meaning |
 | --- | --- |
@@ -77,6 +87,27 @@ Short run summary.
 
     expect(first).toMatchObject({ ok: true, table: { rows: [["First", "71"]] } });
     expect(second).toMatchObject({ ok: true, table: { rows: [["Second", "62"], ["Third", "55"]] } });
+  });
+
+  it("keeps a table-tabs date section valid when a cell contains an escaped pipe", () => {
+    const document = splitTabbedDocument(parseMarkdownSections(`# Run archive
+---
+# Aug 13, 2026
+| Keyword | Score |
+| --- | --- |
+| content system \\| operating model | 71 |`));
+
+    expect(parseScopedMarkdownTable(document.tabs[0].sections)).toMatchObject({
+      ok: true,
+      table: { rows: [["content system | operating model", "71"]] },
+    });
+  });
+
+  it("still rejects an unescaped pipe that adds a column", () => {
+    expect(() => parseMarkdownTable(`| Keyword | Note |
+| --- | --- |
+| content system | operating model | valid |`))
+      .toThrow("Slate table rows must match the header column count.");
   });
 
   it("handles a table-less date tab without borrowing a sibling tab's table", () => {

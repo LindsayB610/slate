@@ -220,5 +220,26 @@ function isTableSeparator(line: string): boolean {
 }
 
 function tableCells(line: string): string[] {
-  return line.trim().replace(/^\||\|$/g, "").split("|").map((cell) => cell.trim());
+  const value = line.trim();
+  const cells: string[] = [];
+  let cell = "";
+  let index = value.startsWith("|") ? 1 : 0;
+
+  for (; index < value.length; index += 1) {
+    const character = value[index];
+    if (character === "\\" && value[index + 1] === "|") {
+      cell += "|";
+      index += 1;
+      continue;
+    }
+    if (character === "|") {
+      cells.push(cell.trim());
+      cell = "";
+      continue;
+    }
+    cell += character;
+  }
+
+  if (cell || !value.endsWith("|")) cells.push(cell.trim());
+  return cells;
 }
