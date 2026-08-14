@@ -24,7 +24,7 @@ describe("Slate Workshop plugin surface", () => {
     expect(markup).toContain("Folder containing slate.config.json");
     expect(markup).toContain("Connect folder");
     expect(markup).toContain("The folder must already contain");
-    expect(markup).not.toContain("disabled");
+    expect(markup).toContain('<button class="slate-plugin-workspace-connect">Connect folder</button>');
   });
 
   it("ships substantial non-private preview data for layout review", () => {

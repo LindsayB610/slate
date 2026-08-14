@@ -21,6 +21,8 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "preview:local": "vite --host 127.0.0.1 --port 1421",
+    "public:check": "node scripts/public-boundary-scan.mjs",
+    "package:check": "node scripts/package-consumer-check.mjs",
     "prepare": "npm run build",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"

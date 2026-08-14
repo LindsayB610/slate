@@ -16,6 +16,44 @@ optional, narrow configuration-management pair
 `read_configured_markdown_config` / `write_configured_markdown_config`.
 It has peer dependencies on React and `@tauri-apps/api`.
 
+### Progressive theme inheritance
+
+When Slate is embedded in Workshop, it inherits Workshop's active semantic CSS
+custom properties for canvas and surfaces, borders, text, accents, focus, status
+colors, and gradients. A palette change therefore reaches Slate through the CSS
+cascade immediately; it does not require a Slate rebuild, a source refresh, or
+a change to `slate.config.json`.
+
+The integration is progressive. Every host value is consumed with a Slate-owned
+fallback, for example `var(--workshop-canvas, #070708)`. When all host tokens are
+absent—as they are in the local browser preview—those standalone fallbacks
+preserve Slate's existing dark pink-and-yellow treatment. Slate does not import
+Workshop source, depend on a Workshop palette id, or require a theme capability
+to load.
+
+Slate scopes its aliases and component rules beneath `.slate-plugin`, so it does
+not restyle Workshop chrome or sibling plugins. Host applications may provide
+any or all of these semantic variables:
+
+```text
+--workshop-canvas
+--workshop-surface
+--workshop-surface-raised
+--workshop-border
+--workshop-text
+--workshop-text-muted
+--workshop-accent
+--workshop-accent-strong
+--workshop-accent-warm
+--workshop-focus-ring
+--workshop-success
+--workshop-warning
+--workshop-danger
+--workshop-gradient-start
+--workshop-gradient-middle
+--workshop-gradient-end
+```
+
 ### External links
 
 Slate accepts safe `http`, `https`, and `mailto` links in configured Markdown.
@@ -130,4 +168,11 @@ personal data.
 npm install
 npm test
 npm run typecheck
+npm run build
+npm run public:check
+npm run package:check
 ```
+
+Run `npm run preview:local` for Slate's standalone fallbacks. Add
+`?host-theme=preview` to that local URL to exercise the generic inherited-token
+path with a representative non-Workshop test palette.
