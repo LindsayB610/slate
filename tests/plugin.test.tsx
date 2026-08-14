@@ -61,6 +61,14 @@ describe("Slate Workshop plugin surface", () => {
     expect(pluginSource).toContain("requestWorkspaceRoot(candidate.trim())");
   });
 
+  it("makes folder removal explicit and keeps the private folder untouched", () => {
+    const pluginSource = readFileSync(new URL("../src/plugin.tsx", import.meta.url), "utf8");
+    expect(pluginSource).toContain("Disconnect Slate folder?");
+    expect(pluginSource).toContain("Slate will forget this folder's path");
+    expect(pluginSource).toContain("The folder and its Markdown files will not change");
+    expect(pluginSource).toContain("clearWorkspaceRoot?.()");
+  });
+
   it("does not bundle a Tauri opener plugin", () => {
     const packageJson = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as { dependencies?: Record<string, string>; devDependencies?: Record<string, string> };
     expect({ ...packageJson.dependencies, ...packageJson.devDependencies }).not.toHaveProperty("@tauri-apps/plugin-opener");

@@ -5,7 +5,7 @@ export type SlateSnapshot = { contents: string; updatedAt: number };
 export type SlateSourceChange = { root: string; configFile: string; source: string };
 export type InlineMarkdownToken = { type: "text"; value: string } | { type: "strong"; value: string } | { type: "link"; label: string; href: string };
 export type ExternalUrlInvoker = (command: "open_external_url", args: { url: string }) => Promise<unknown>;
-export type SlatePreferenceStorage = Pick<Storage, "getItem" | "setItem">;
+export type SlatePreferenceStorage = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 
 export const externalLinkFailureMessage = "Slate couldn't open this link. Update Workshop, then try again.";
 
@@ -205,6 +205,12 @@ export function loadSlateFavoriteSourceIds(storage: SlatePreferenceStorage | und
 export function saveSlateFavoriteSourceIds(storage: SlatePreferenceStorage | undefined, workspaceRoot: string, favoriteIds: string[]): void {
   if (!storage || !workspaceRoot) return;
   try { storage.setItem(slateFavoriteStorageKey(workspaceRoot), JSON.stringify([...new Set(favoriteIds)])); } catch { /* Preferences are optional. */ }
+}
+
+/** Removes UI-only favorites when the user explicitly disconnects a Slate folder. */
+export function clearSlateFavoriteSourceIds(storage: SlatePreferenceStorage | undefined, workspaceRoot: string): void {
+  if (!storage || !workspaceRoot) return;
+  try { storage.removeItem(slateFavoriteStorageKey(workspaceRoot)); } catch { /* Preferences are optional. */ }
 }
 
 export function toggleSlateFavoriteSourceId(favoriteIds: string[], sourceId: string): string[] {

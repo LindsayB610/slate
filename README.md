@@ -33,9 +33,13 @@ unique local Markdown files.
 
 In Slate, select **Connect a Slate folder**, then enter the absolute path to an
 existing private folder containing `slate.config.json`. Once connected, use
-**Change Slate folder** from the source chooser to replace it. Slate never
-scans the folder or creates configuration for you: it reads only the Markdown
-files explicitly declared in that configuration.
+**Change Slate folder** from the source chooser to replace it. Workshop keeps
+the selected folder path as local UI state, so reopening the app or renewing
+OS folder access does not require re-entering it. Use **Disconnect** to forget
+that local selection; the folder, configuration, Markdown files, and source
+data remain untouched. Slate never scans the folder or creates configuration
+for you: it reads only the Markdown files explicitly declared in that
+configuration.
 
 ```json
 {

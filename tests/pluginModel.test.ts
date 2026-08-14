@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { describeSlateView, externalLinkFailureMessage, isSlateTauriRuntime, keepLatestSnapshot, loadSlateFavoriteSourceIds, openSlateExternalUrl, parseInlineMarkdown, partitionSlateSources, releaseIfDisposed, retainSelectedSource, saveSlateFavoriteSourceIds, shouldRefreshSource, slateFavoriteStorageKey, slateHeadingTag, slateLinkTarget, sortTableRows, toggleSlateFavoriteSourceId, validateSourceMetadata } from "../src/pluginModel.js";
+import { clearSlateFavoriteSourceIds, describeSlateView, externalLinkFailureMessage, isSlateTauriRuntime, keepLatestSnapshot, loadSlateFavoriteSourceIds, openSlateExternalUrl, parseInlineMarkdown, partitionSlateSources, releaseIfDisposed, retainSelectedSource, saveSlateFavoriteSourceIds, shouldRefreshSource, slateFavoriteStorageKey, slateHeadingTag, slateLinkTarget, sortTableRows, toggleSlateFavoriteSourceId, validateSourceMetadata } from "../src/pluginModel.js";
 
 describe("Slate plugin refresh boundary", () => {
   it("describes each Slate-owned source view for the source picker", () => {
@@ -89,12 +89,20 @@ describe("Slate source favorites", () => {
 
   it("persists only favorite ids per normalized workspace and survives corrupt storage", () => {
     const values = new Map<string, string>();
-    const storage = { getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => { values.set(key, value); } };
+    const storage = { getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => { values.set(key, value); }, removeItem: (key: string) => { values.delete(key); } };
     const key = slateFavoriteStorageKey("/private/slate/");
     saveSlateFavoriteSourceIds(storage, "/private/slate/", ["alpha", "zeta"]);
     expect(key).toBe(slateFavoriteStorageKey("/private/slate"));
     expect(loadSlateFavoriteSourceIds(storage, "/private/slate")).toEqual(["alpha", "zeta"]);
     values.set(key, "not json");
+    expect(loadSlateFavoriteSourceIds(storage, "/private/slate")).toEqual([]);
+  });
+
+  it("forgets folder-scoped favorites when that folder is explicitly disconnected", () => {
+    const values = new Map<string, string>();
+    const storage = { getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => { values.set(key, value); }, removeItem: (key: string) => { values.delete(key); } };
+    saveSlateFavoriteSourceIds(storage, "/private/slate", ["alpha"]);
+    clearSlateFavoriteSourceIds(storage, "/private/slate");
     expect(loadSlateFavoriteSourceIds(storage, "/private/slate")).toEqual([]);
   });
 });
