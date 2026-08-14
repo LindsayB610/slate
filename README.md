@@ -29,6 +29,14 @@ Each person keeps their filled-in configuration outside this repository and
 outside Workshop's public repository. The configuration can list any number of
 unique local Markdown files.
 
+### Connecting a Slate folder
+
+In Slate, select **Connect a Slate folder**, then enter the absolute path to an
+existing private folder containing `slate.config.json`. Once connected, use
+**Change Slate folder** from the source chooser to replace it. Slate never
+scans the folder or creates configuration for you: it reads only the Markdown
+files explicitly declared in that configuration.
+
 ```json
 {
   "version": 1,

@@ -18,10 +18,12 @@ describe("Slate Workshop plugin surface", () => {
     });
   });
 
-  it("renders a neutral private-workspace setup view without reading a source", () => {
+  it("renders a private Slate-folder setup view without reading a source", () => {
     const markup = renderToStaticMarkup(<WorkshopToolView requestWorkspaceRoot={() => undefined} />);
-    expect(markup).toContain("Slate private folder");
-    expect(markup).toContain("Connect Slate");
+    expect(markup).toContain("Connect a Slate folder");
+    expect(markup).toContain("Folder containing slate.config.json");
+    expect(markup).toContain("Connect folder");
+    expect(markup).toContain("The folder must already contain");
     expect(markup).not.toContain("disabled");
   });
 
@@ -40,7 +42,7 @@ describe("Slate Workshop plugin surface", () => {
     const pluginSource = readFileSync(new URL("../src/plugin.tsx", import.meta.url), "utf8");
     expect(pluginSource).toContain(".slate-plugin-sources{display:grid;gap:10px;grid-template-columns:repeat(3,minmax(0,1fr))}");
     expect(pluginSource).toContain("@media (max-width:760px){.slate-plugin-sources{grid-template-columns:repeat(2,minmax(0,1fr))}}");
-    expect(pluginSource).toContain("@media (max-width:520px){.slate-plugin-sources{grid-template-columns:1fr}}");
+    expect(pluginSource).toContain("@media (max-width:520px){.slate-plugin-sources{grid-template-columns:1fr}");
   });
 
   it("renders a dedicated favorite control and omits an empty Favorites shelf", () => {
@@ -49,6 +51,14 @@ describe("Slate Workshop plugin surface", () => {
     expect(pluginSource).toContain("Remove ${source.label} from favorites");
     expect(pluginSource).toContain("groups.favorites.length ? <SourceGroup label=\"Favorites\"");
     expect(pluginSource).not.toContain("No favorites yet");
+  });
+
+  it("keeps connected-folder replacement inside Slate's UI", () => {
+    const pluginSource = readFileSync(new URL("../src/plugin.tsx", import.meta.url), "utf8");
+    expect(pluginSource).toContain("Change Slate folder");
+    expect(pluginSource).toContain("Use a different folder");
+    expect(pluginSource).toContain("Slate does not search this folder");
+    expect(pluginSource).toContain("requestWorkspaceRoot(candidate.trim())");
   });
 
   it("does not bundle a Tauri opener plugin", () => {
