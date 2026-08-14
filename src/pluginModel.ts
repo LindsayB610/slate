@@ -228,7 +228,7 @@ export function partitionSlateSources(sources: SlateSourceMetadata[], favoriteId
 }
 
 export function validateSourceMetadata(value: unknown): SlateSourceMetadata[] | null {
-  if (!Array.isArray(value) || value.length === 0) return null;
+  if (!Array.isArray(value)) return null;
   const sources: SlateSourceMetadata[] = [];
   const ids = new Set<string>();
   for (const item of value) {

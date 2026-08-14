@@ -3,14 +3,17 @@ import { listen } from "@tauri-apps/api/event";
 import * as ScrollAreaPrimitive from "@radix-ui/react-scroll-area";
 import * as TabsPrimitive from "@radix-ui/react-tabs";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode, type RefObject } from "react";
 import { parseMarkdownSections, parseMarkdownTable, parseScopedMarkdownTable, parseSlateConfig, splitTabbedDocument, type SlateConfig, type SlateSourceDefinition } from "./index.js";
 import { clearSlateFavoriteSourceIds, describeSlateView, isSlateTauriRuntime, keepLatestSnapshot, loadSlateFavoriteSourceIds, openSlateExternalUrl, parseInlineMarkdown, partitionSlateSources, releaseIfDisposed, retainSelectedSource, saveSlateFavoriteSourceIds, shouldRefreshSource, slateDemoSnapshots, slateDemoSources, slateHeadingTag, slateLinkTarget, sortTableRows, toggleSlateFavoriteSourceId, validateSourceMetadata, type SlateSnapshot, type SlateSourceChange, type TableSortDirection } from "./pluginModel.js";
-import { slateHostThemeVariables as hostTheme } from "./themeContract.js";
+import { slateHostThemeVariables as hostTheme, slateOwnedSemanticColors } from "./themeContract.js";
 
 type Source = Pick<SlateSourceDefinition, "id" | "label" | "view">;
 const configFile = "slate.config.json";
 const SlatePortalContext = createContext<HTMLElement | null>(null);
+function createSlateDemoConfigSources(): SlateSourceDefinition[] {
+  return slateDemoSources.map((source) => ({ ...source, path: `/preview/${source.id}.md` }));
+}
 export type WorkspaceRootRequestResult = { ok: true } | { ok: false; message: string };
 export type WorkshopToolViewProps = { activeRouteId?: string; workspaceRoot?: string; requestWorkspaceRoot: (root?: string) => WorkspaceRootRequestResult | void; clearWorkspaceRoot?: () => void };
 
@@ -25,14 +28,249 @@ export function WorkshopToolView({ workspaceRoot, requestWorkspaceRoot, clearWor
   const source = sources.find((item) => item.id === selected); return <SlateRoot>{managing ? <ManageDocuments workspaceRoot={workspaceRoot} onDone={() => { setManaging(false); setReload((value) => value + 1); }} /> : source ? <SourceDocument source={source} snapshot={data[source.id]} onBack={() => setSelected(undefined)} /> : <SourcePicker sources={sources} favoriteIds={favoriteIds} onSelect={setSelected} onManage={() => setManaging(true)} onToggleFavorite={(id) => setFavoriteIds((current) => { const next = toggleSlateFavoriteSourceId(current, id); saveSlateFavoriteSourceIds(slateLocalStorage(), workspaceRoot, next); return next; })} workspaceRoot={workspaceRoot} requestWorkspaceRoot={requestWorkspaceRoot} clearWorkspaceRoot={clearWorkspaceRoot} />}{error && <p className="slate-plugin-error" role="alert">{error}</p>}</SlateRoot>;
 }
 function SlateRoot({ children }: { children: ReactNode }) { const [portalContainer, setPortalContainer] = useState<HTMLElement | null>(null); return <main className="slate-plugin"><SlateStyles /><SlatePortalContext.Provider value={portalContainer}>{children}<div className="slate-plugin-portal" ref={setPortalContainer} /></SlatePortalContext.Provider></main>; }
-function DemoSlate() { const [selected, setSelected] = useState<string>(); const [favoriteIds, setFavoriteIds] = useState<string[]>(() => loadSlateFavoriteSourceIds(slateLocalStorage(), "slate-demo")); const source = slateDemoSources.find((item) => item.id === selected); return <SlateRoot>{source ? <SourceDocument source={source} snapshot={slateDemoSnapshots[source.id]} onBack={() => setSelected(undefined)} /> : <><SourcePicker sources={slateDemoSources} favoriteIds={favoriteIds} onSelect={setSelected} onManage={() => undefined} onToggleFavorite={(id) => setFavoriteIds((current) => { const next = toggleSlateFavoriteSourceId(current, id); saveSlateFavoriteSourceIds(slateLocalStorage(), "slate-demo", next); return next; })} /><p className="slate-plugin-demo">Preview data — native Workshop uses only your configured local files.</p></>}</SlateRoot>; }
+function DemoSlate() {
+  const [selected, setSelected] = useState<string>();
+  const [managing, setManaging] = useState(false);
+  const [demoSources, setDemoSources] = useState<SlateSourceDefinition[]>(createSlateDemoConfigSources);
+  const [favoriteIds, setFavoriteIds] = useState<string[]>(() => loadSlateFavoriteSourceIds(slateLocalStorage(), "slate-demo"));
+  const metadata = demoSources.map(({ id, label, view }) => ({ id, label, view }));
+  const source = metadata.find((item) => item.id === selected);
+  return <SlateRoot>{managing
+    ? <DocumentManagerEditor initialSources={demoSources} onCancel={() => setManaging(false)} onSave={async (next) => { setDemoSources(next); setManaging(false); }} />
+    : source
+      ? <SourceDocument source={source} snapshot={slateDemoSnapshots[source.id]} onBack={() => setSelected(undefined)} />
+      : <><SourcePicker sources={metadata} favoriteIds={favoriteIds} onSelect={setSelected} onManage={() => setManaging(true)} onToggleFavorite={(id) => setFavoriteIds((current) => { const next = toggleSlateFavoriteSourceId(current, id); saveSlateFavoriteSourceIds(slateLocalStorage(), "slate-demo", next); return next; })} /><p className="slate-plugin-demo">Preview data — native Workshop uses only your configured local files.</p></>}
+  </SlateRoot>;
+}
 function slateLocalStorage() { try { return typeof window === "undefined" ? undefined : window.localStorage; } catch { return undefined; } }
 function isSetupPreview(): boolean { return typeof window !== "undefined" && new URLSearchParams(window.location.search).has("setup"); }
-function SlateWorkspaceSetup({ initialRoot, onRootChange, requestWorkspaceRoot, onCancel }: { initialRoot: string; onRootChange: (root: string) => void; requestWorkspaceRoot: (root?: string) => WorkspaceRootRequestResult | void; onCancel?: () => void }) { const [candidate, setCandidate] = useState(initialRoot); const [message, setMessage] = useState<string>(); const connect = () => { if (!candidate.trim()) { setMessage("Enter the folder path first."); return; } const result = requestWorkspaceRoot(candidate.trim()); if (result && !result.ok) { setMessage(result.message); return; } setMessage(undefined); onRootChange(candidate); }; return <section className="slate-plugin-workspace-setup" aria-labelledby="slate-folder-heading"><header className="slate-plugin-header"><p>Slate · local reference desk</p><h1 id="slate-folder-heading">{onCancel ? "Use a different folder" : "Connect a Slate folder"}</h1></header><p className="slate-plugin-workspace-lede">{onCancel ? "Replace the current private Slate folder." : "Choose the private folder that holds this Slate setup."}</p><label className="slate-plugin-workspace-field"><span>Folder containing slate.config.json</span><input aria-label="Folder containing slate.config.json" value={candidate} onChange={(event) => { setCandidate(event.target.value); onRootChange(event.target.value); }} placeholder="/absolute/path/to/slate" /></label><p className="slate-plugin-workspace-note">The folder must already contain <code>slate.config.json</code>. Slate does not search this folder or create files in it.</p>{message ? <p className="slate-plugin-error" role="alert">{message}</p> : null}<div className="slate-plugin-workspace-actions"><button className="slate-plugin-workspace-connect" onClick={connect}>Connect folder</button>{onCancel ? <button className="slate-plugin-workspace-cancel" onClick={onCancel}>Cancel</button> : null}</div></section>; }
+function SlateWorkspaceSetup({ initialRoot, onRootChange, requestWorkspaceRoot, onCancel }: { initialRoot: string; onRootChange: (root: string) => void; requestWorkspaceRoot: (root?: string) => WorkspaceRootRequestResult | void; onCancel?: () => void }) { const [candidate, setCandidate] = useState(initialRoot); const [message, setMessage] = useState<string>(); const connect = () => { if (!candidate.trim()) { setMessage("Enter the folder path first."); return; } const result = requestWorkspaceRoot(candidate.trim()); if (result && !result.ok) { setMessage(result.message); return; } setMessage(undefined); onRootChange(candidate); }; return <section className="slate-plugin-workspace-setup" aria-labelledby="slate-folder-heading"><header className="slate-plugin-header"><p>Slate · local reference desk</p><h1 id="slate-folder-heading">{onCancel ? "Use a different folder" : "Connect a Slate folder"}</h1></header>{onCancel ? <button className="slate-plugin-back slate-plugin-secondary-back" aria-label="Back to Slate" onClick={onCancel}>← Back to Slate</button> : null}<p className="slate-plugin-workspace-lede">{onCancel ? "Replace the current private Slate folder." : "Choose the private folder that holds this Slate setup."}</p><label className="slate-plugin-workspace-field"><span>Folder containing slate.config.json</span><input aria-label="Folder containing slate.config.json" value={candidate} onChange={(event) => { setCandidate(event.target.value); onRootChange(event.target.value); }} placeholder="/absolute/path/to/slate" /></label><p className="slate-plugin-workspace-note">The folder must already contain <code>slate.config.json</code>. Slate does not search this folder or create files in it.</p>{message ? <p className="slate-plugin-error" role="alert">{message}</p> : null}<div className="slate-plugin-workspace-actions"><button className="slate-plugin-workspace-connect" onClick={connect}>Connect folder</button></div></section>; }
 function SlateWorkspaceDisconnect({ onConfirm, onCancel }: { onConfirm: () => void; onCancel: () => void }) { return <section className="slate-plugin-workspace-setup" aria-labelledby="slate-disconnect-heading"><header className="slate-plugin-header"><p>Slate · local reference desk</p><h1 id="slate-disconnect-heading">Disconnect Slate folder?</h1></header><p className="slate-plugin-workspace-lede">Slate will forget this folder's path on this computer.</p><p className="slate-plugin-workspace-note">The folder and its Markdown files will not change. You can reconnect it later.</p><div className="slate-plugin-workspace-actions"><button className="slate-plugin-workspace-disconnect" onClick={onConfirm}>Disconnect folder</button><button className="slate-plugin-workspace-cancel" onClick={onCancel}>Cancel</button></div></section>; }
-function SourcePicker({ sources, favoriteIds, onSelect, onManage, onToggleFavorite, workspaceRoot, requestWorkspaceRoot, clearWorkspaceRoot }: { sources: Source[]; favoriteIds: string[]; onSelect: (id: string) => void; onManage: () => void; onToggleFavorite: (id: string) => void; workspaceRoot?: string; requestWorkspaceRoot?: (root?: string) => WorkspaceRootRequestResult | void; clearWorkspaceRoot?: () => void }) { const [changingWorkspace, setChangingWorkspace] = useState(false); const [disconnectingWorkspace, setDisconnectingWorkspace] = useState(false); const [candidateRoot, setCandidateRoot] = useState(workspaceRoot ?? ""); const groups = partitionSlateSources(sources, favoriteIds); if (changingWorkspace && requestWorkspaceRoot) return <SlateWorkspaceSetup initialRoot={candidateRoot} onRootChange={setCandidateRoot} requestWorkspaceRoot={requestWorkspaceRoot} onCancel={() => setChangingWorkspace(false)} />; if (disconnectingWorkspace && clearWorkspaceRoot) return <SlateWorkspaceDisconnect onConfirm={() => { clearSlateFavoriteSourceIds(slateLocalStorage(), workspaceRoot ?? ""); clearWorkspaceRoot?.(); }} onCancel={() => setDisconnectingWorkspace(false)} />; return <><header className="slate-plugin-header slate-plugin-source-header"><div><p>Slate · local reference desk</p><h1>Slate</h1></div><div className="slate-plugin-workspace-tools"><button className="slate-plugin-change-workspace" onClick={onManage}>Manage documents</button>{requestWorkspaceRoot ? <button className="slate-plugin-change-workspace" onClick={() => setChangingWorkspace(true)}>Change Slate folder</button> : null}{clearWorkspaceRoot ? <button className="slate-plugin-disconnect-workspace" onClick={() => setDisconnectingWorkspace(true)}>Disconnect</button> : null}</div></header>{groups.favorites.length ? <SourceGroup label="Favorites" sources={groups.favorites} favoriteIds={favoriteIds} onSelect={onSelect} onToggleFavorite={onToggleFavorite} /> : null}{groups.documents.length ? <SourceGroup label={groups.favorites.length ? "All documents" : undefined} sources={groups.documents} favoriteIds={favoriteIds} onSelect={onSelect} onToggleFavorite={onToggleFavorite} /> : <section className="slate-plugin-empty-documents"><h2>No documents configured</h2><p>Add a declared Markdown file to begin.</p><button onClick={onManage}>Manage documents</button></section>}</>; }
-function ManageDocuments({ workspaceRoot, onDone }: { workspaceRoot: string; onDone: () => void }) { const [sources, setSources] = useState<SlateSourceDefinition[]>(); const [message, setMessage] = useState<string>(); const [saving, setSaving] = useState(false); const [removing, setRemoving] = useState<number>(); useEffect(() => { let disposed = false; void invoke<SlateConfig>("read_configured_markdown_config", { workspaceRoot, configFile }).then((config) => { if (!disposed) setSources(config.sources); }).catch(() => { if (!disposed) setMessage("Slate couldn't load this private configuration. Nothing has been changed."); }); return () => { disposed = true; }; }, [workspaceRoot]); const update = (index: number, patch: Partial<SlateSourceDefinition>) => setSources((current) => current?.map((source, item) => item === index ? { ...source, ...patch } : source)); const move = (index: number, offset: number) => setSources((current) => { if (!current || !current[index + offset]) return current; const next = [...current]; [next[index], next[index + offset]] = [next[index + offset], next[index]]; return next; }); const save = async () => { if (!sources) return; const parsed = parseSlateConfig(JSON.stringify({ version: 1, sources })); if (!parsed.ok) { setMessage(parsed.message); return; } setSaving(true); setMessage(undefined); try { await invoke("write_configured_markdown_config", { workspaceRoot, configFile, config: parsed.config }); onDone(); } catch (error) { setMessage(`Slate couldn't save these documents. ${String(error)}`); } finally { setSaving(false); } }; if (!sources) return <section className="slate-plugin-manager"><p>Loading document configuration…</p>{message ? <p className="slate-plugin-error" role="alert">{message}</p> : null}</section>; return <section className="slate-plugin-manager" aria-labelledby="slate-manager-heading"><header className="slate-plugin-header"><p>Slate · local reference desk</p><h1 id="slate-manager-heading">Manage documents</h1></header><p className="slate-plugin-workspace-lede">Slate saves only this private folder’s declared Markdown sources. Documents themselves are never edited.</p><p className="slate-plugin-workspace-note">Order is saved here; the document picker still alphabetizes documents and favorites.</p><div className="slate-plugin-manager-list">{sources.map((source, index) => <fieldset key={`${source.id}-${index}`}><legend>Document {index + 1}</legend><label>Label<input value={source.label} onChange={(event) => update(index, { label: event.target.value })} /></label><label>Id<input value={source.id} onChange={(event) => update(index, { id: event.target.value })} /></label><label>Absolute Markdown path<input value={source.path} onChange={(event) => update(index, { path: event.target.value })} /></label><label>View<select value={source.view} onChange={(event) => update(index, { view: event.target.value as SlateSourceDefinition["view"] })}><option value="markdown">Markdown</option><option value="markdown-tabs">Tabbed Markdown</option><option value="table">Table</option><option value="table-tabs">Tabbed tables</option></select></label><div>{removing === index ? <><span>Remove this document from Slate?</span><button className="slate-plugin-remove" onClick={() => { setSources((current) => current?.filter((_, item) => item !== index)); setRemoving(undefined); }}>Remove document</button><button onClick={() => setRemoving(undefined)}>Keep</button></> : <><button disabled={index === 0} onClick={() => move(index, -1)}>Move up</button><button disabled={index === sources.length - 1} onClick={() => move(index, 1)}>Move down</button><button className="slate-plugin-remove" onClick={() => setRemoving(index)}>Remove</button></>}</div></fieldset>)}</div>{message ? <p className="slate-plugin-error" role="alert">{message}</p> : null}<div className="slate-plugin-workspace-actions"><button onClick={() => setSources((current) => [...(current ?? []), { id: "new-document", label: "New document", path: "/absolute/path/to/document.md", view: "markdown" }])}>Add document</button><button className="slate-plugin-workspace-connect" disabled={saving} onClick={() => void save()}>{saving ? "Saving…" : "Save documents"}</button><button className="slate-plugin-workspace-cancel" disabled={saving} onClick={onDone}>Cancel</button></div></section>; }
-function SourceGroup({ label, sources, favoriteIds, onSelect, onToggleFavorite }: { label?: string; sources: Source[]; favoriteIds: string[]; onSelect: (id: string) => void; onToggleFavorite: (id: string) => void }) { return <section className="slate-plugin-source-group" aria-label={label}>{label ? <h2>{label === "Favorites" ? "★ " : ""}{label}</h2> : null}<nav className="slate-plugin-sources" aria-label={label ? `Slate ${label.toLowerCase()}` : "Slate sources"}>{sources.map((source) => <SourceCard key={source.id} source={source} favorite={favoriteIds.includes(source.id)} onSelect={onSelect} onToggleFavorite={onToggleFavorite} />)}</nav></section>; }
+function SourcePicker({ sources, favoriteIds, onSelect, onManage, onToggleFavorite, workspaceRoot, requestWorkspaceRoot, clearWorkspaceRoot }: { sources: Source[]; favoriteIds: string[]; onSelect: (id: string) => void; onManage: () => void; onToggleFavorite: (id: string) => void; workspaceRoot?: string; requestWorkspaceRoot?: (root?: string) => WorkspaceRootRequestResult | void; clearWorkspaceRoot?: () => void }) {
+  const [changingWorkspace, setChangingWorkspace] = useState(false);
+  const [disconnectingWorkspace, setDisconnectingWorkspace] = useState(false);
+  const [candidateRoot, setCandidateRoot] = useState(workspaceRoot ?? "");
+  const groups = partitionSlateSources(sources, favoriteIds);
+  const openWorkspaceChange = () => { setCandidateRoot(workspaceRoot ?? ""); setChangingWorkspace(true); };
+  const cancelWorkspaceChange = () => { setCandidateRoot(workspaceRoot ?? ""); setChangingWorkspace(false); };
+  if (changingWorkspace && requestWorkspaceRoot) return <SlateWorkspaceSetup initialRoot={candidateRoot} onRootChange={setCandidateRoot} requestWorkspaceRoot={requestWorkspaceRoot} onCancel={cancelWorkspaceChange} />;
+  if (disconnectingWorkspace && clearWorkspaceRoot) return <SlateWorkspaceDisconnect onConfirm={() => { clearSlateFavoriteSourceIds(slateLocalStorage(), workspaceRoot ?? ""); clearWorkspaceRoot?.(); }} onCancel={() => setDisconnectingWorkspace(false)} />;
+  return <><header className="slate-plugin-header slate-plugin-source-header"><div><p>Slate · local reference desk</p><h1>Slate</h1></div><div className="slate-plugin-workspace-tools"><button className="slate-plugin-change-workspace" onClick={onManage}>Manage documents</button>{requestWorkspaceRoot ? <button className="slate-plugin-change-workspace" onClick={openWorkspaceChange}>Change Slate folder</button> : null}{clearWorkspaceRoot ? <button className="slate-plugin-disconnect-workspace" onClick={() => setDisconnectingWorkspace(true)}>Disconnect</button> : null}</div></header>{groups.favorites.length ? <SourceGroup label="Favorites" sources={groups.favorites} favoriteIds={favoriteIds} onSelect={onSelect} onToggleFavorite={onToggleFavorite} /> : null}{groups.documents.length ? <SourceGroup label={groups.favorites.length ? "All documents" : undefined} sources={groups.documents} favoriteIds={favoriteIds} onSelect={onSelect} onToggleFavorite={onToggleFavorite} /> : <section className="slate-plugin-empty-documents"><h2>No documents configured</h2><p>Add a declared Markdown file to begin.</p><button onClick={onManage}>Manage documents</button></section>}</>;
+}
+function ManageDocuments({ workspaceRoot, onDone }: { workspaceRoot: string; onDone: () => void }) {
+  const [sources, setSources] = useState<SlateSourceDefinition[]>();
+  const [loadError, setLoadError] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+  useEffect(() => {
+    let disposed = false;
+    setSources(undefined);
+    setLoadError(false);
+    void invoke<SlateConfig>("read_configured_markdown_config", { workspaceRoot, configFile })
+      .then((config) => { if (!disposed) setSources(config.sources); })
+      .catch(() => { if (!disposed) setLoadError(true); });
+    return () => { disposed = true; };
+  }, [workspaceRoot, attempt]);
+  if (!sources) return <ManagerState error={loadError} onBack={onDone} onRetry={() => setAttempt((value) => value + 1)} />;
+  return <DocumentManagerEditor
+    initialSources={sources}
+    onCancel={onDone}
+    onSave={async (next) => {
+      await invoke("write_configured_markdown_config", { workspaceRoot, configFile, config: { version: 1, sources: next } });
+      onDone();
+    }}
+  />;
+}
+
+function ManagerState({ error, onBack, onRetry }: { error: boolean; onBack: () => void; onRetry: () => void }) {
+  return <section className="slate-plugin-manager" aria-labelledby="slate-manager-heading">
+    <ManagerHeader />
+    <button className="slate-plugin-back slate-plugin-secondary-back" aria-label="Back to Slate" onClick={onBack}>← Back to Slate</button>
+    <div className="slate-plugin-manager-state" role={error ? "alert" : "status"}>
+      <strong>{error ? "Slate couldn’t load this configuration." : "Loading documents…"}</strong>
+      {error ? <><p>Nothing has been changed. Check Workshop’s folder access, then try again.</p><button onClick={onRetry}>Try again</button></> : null}
+    </div>
+  </section>;
+}
+
+function ManagerHeader() {
+  return <header className="slate-plugin-header"><p>Slate · local reference desk</p><h1 id="slate-manager-heading">Manage documents</h1></header>;
+}
+
+type SourceDraftErrors = Partial<Record<"label" | "id" | "path", string>>;
+
+function validateSourceDrafts(sources: SlateSourceDefinition[]): SourceDraftErrors[] {
+  const ids = new Map<string, number>();
+  const paths = new Map<string, number>();
+  for (const source of sources) {
+    ids.set(source.id, (ids.get(source.id) ?? 0) + 1);
+    paths.set(source.path, (paths.get(source.path) ?? 0) + 1);
+  }
+  return sources.map((source) => {
+    const errors: SourceDraftErrors = {};
+    if (!source.label.trim()) errors.label = "Enter a label.";
+    if (!/^[a-z0-9][a-z0-9-]*$/.test(source.id)) errors.id = "Use lowercase letters, numbers, and hyphens.";
+    else if ((ids.get(source.id) ?? 0) > 1) errors.id = "Use a unique document ID.";
+    if (!/^\/(?!.*(?:^|\/)\.\.(?:\/|$)).+\.md$/.test(source.path)) errors.path = "Enter an absolute path to a Markdown file.";
+    else if ((paths.get(source.path) ?? 0) > 1) errors.path = "Use a unique Markdown path.";
+    return errors;
+  });
+}
+
+function nextDocumentId(sources: SlateSourceDefinition[]): string {
+  const used = new Set(sources.map((source) => source.id));
+  if (!used.has("new-document")) return "new-document";
+  let suffix = 2;
+  while (used.has(`new-document-${suffix}`)) suffix += 1;
+  return `new-document-${suffix}`;
+}
+
+function useConfirmationFocus(open: boolean, initialFocus: RefObject<HTMLButtonElement | null>) {
+  useEffect(() => {
+    if (!open) return;
+    const returnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : undefined;
+    initialFocus.current?.focus();
+    return () => { if (returnFocus?.isConnected) returnFocus.focus(); };
+  }, [open, initialFocus]);
+}
+
+function confirmationKeyDown(event: KeyboardEvent<HTMLDivElement>, close: () => void) {
+  if (event.key === "Escape") { event.preventDefault(); close(); return; }
+  if (event.key !== "Tab") return;
+  const controls = [...event.currentTarget.querySelectorAll<HTMLButtonElement>("button:not(:disabled)")];
+  if (!controls.length) return;
+  const first = controls[0];
+  const last = controls[controls.length - 1];
+  if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+  else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+}
+
+function DocumentManagerEditor({ initialSources, onSave, onCancel }: { initialSources: SlateSourceDefinition[]; onSave: (sources: SlateSourceDefinition[]) => Promise<void>; onCancel: () => void }) {
+  const [sources, setSources] = useState<SlateSourceDefinition[]>(initialSources);
+  const [selected, setSelected] = useState(initialSources.length ? 0 : -1);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<string>();
+  const [showValidation, setShowValidation] = useState(false);
+  const [removing, setRemoving] = useState(false);
+  const [discarding, setDiscarding] = useState(false);
+  const keepDocumentRef = useRef<HTMLButtonElement>(null);
+  const keepEditingRef = useRef<HTMLButtonElement>(null);
+  const dirty = JSON.stringify(sources) !== JSON.stringify(initialSources);
+  const errors = validateSourceDrafts(sources);
+  const source = selected >= 0 ? sources[selected] : undefined;
+  const sourceErrors = selected >= 0 ? errors[selected] ?? {} : {};
+  useConfirmationFocus(removing, keepDocumentRef);
+  useConfirmationFocus(discarding, keepEditingRef);
+
+  const update = (patch: Partial<SlateSourceDefinition>) => {
+    setSources((current) => current.map((item, index) => index === selected ? { ...item, ...patch } : item));
+    setMessage(undefined);
+  };
+  const move = (index: number, offset: number) => {
+    const target = index + offset;
+    if (!sources[target]) return;
+    setSources((current) => {
+      const next = [...current];
+      [next[index], next[target]] = [next[target], next[index]];
+      return next;
+    });
+    setSelected((current) => current === index ? target : current === target ? index : current);
+  };
+  const add = () => {
+    const next = { id: nextDocumentId(sources), label: "Untitled document", path: "", view: "markdown" as const };
+    setSources((current) => [...current, next]);
+    setSelected(sources.length);
+    setShowValidation(false);
+    setMessage(undefined);
+  };
+  const remove = () => {
+    const next = sources.filter((_, index) => index !== selected);
+    setSources(next);
+    setSelected(next.length ? Math.min(selected, next.length - 1) : -1);
+    setRemoving(false);
+    setMessage(undefined);
+  };
+  const save = async () => {
+    setShowValidation(true);
+    if (errors.some((item) => Object.keys(item).length)) {
+      setMessage("Fix the highlighted fields before saving.");
+      return;
+    }
+    const parsed = parseSlateConfig(JSON.stringify({ version: 1, sources }));
+    if (!parsed.ok) {
+      setMessage(parsed.message);
+      return;
+    }
+    setSaving(true);
+    setMessage(undefined);
+    try { await onSave(parsed.config.sources); }
+    catch (error) { setMessage(`Slate couldn’t save these documents. ${String(error)}`); }
+    finally { setSaving(false); }
+  };
+  const cancel = () => { if (dirty) setDiscarding(true); else onCancel(); };
+
+  return <section className="slate-plugin-manager" aria-labelledby="slate-manager-heading">
+    <ManagerHeader />
+    <button className="slate-plugin-back slate-plugin-secondary-back" aria-label="Back to Slate" onClick={cancel}>← Back to Slate</button>
+    <div className="slate-plugin-manager-intro">
+      <div><p>Choose a document to edit.</p><span>Slate updates only this private configuration. Markdown files are never edited.</span><span className="slate-plugin-manager-order-note">Arrows change configuration order; Slate home stays alphabetical.</span></div>
+      <button className="slate-plugin-manager-add" onClick={add}>＋ Add document</button>
+    </div>
+    <div className="slate-plugin-manager-layout">
+      <nav className="slate-plugin-manager-index" aria-label="Configured documents">
+        {sources.length ? sources.map((item, index) => {
+          const view = describeSlateView(item.view);
+          const label = item.label.trim() || "Untitled document";
+          return <div className="slate-plugin-manager-index-row" data-selected={selected === index} key={`${item.id}-${index}`}>
+            <button className="slate-plugin-manager-index-open" aria-label={`Edit ${label}`} aria-current={selected === index ? "true" : undefined} onClick={() => { setSelected(index); setRemoving(false); }}>
+              <span className="slate-plugin-manager-index-glyph" aria-hidden="true">{view.glyph}</span>
+              <span><strong>{label}</strong><small>{view.description}</small></span>
+            </button>
+            <span className="slate-plugin-manager-reorder">
+              <button aria-label={`Move ${label} up`} disabled={index === 0} onClick={() => move(index, -1)}>↑</button>
+              <button aria-label={`Move ${label} down`} disabled={index === sources.length - 1} onClick={() => move(index, 1)}>↓</button>
+            </span>
+          </div>;
+        }) : <div className="slate-plugin-manager-index-empty"><strong>No documents yet</strong><span>Add one to begin.</span></div>}
+      </nav>
+      <section className="slate-plugin-manager-editor" aria-label={source ? `Edit ${source.label || "document"}` : "Document editor"}>
+        {source ? <>
+          <div className="slate-plugin-manager-editor-header">
+            <div><span>Document {selected + 1} of {sources.length}</span><h2>{source.label.trim() || "Untitled document"}</h2></div>
+            <button className="slate-plugin-manager-remove" aria-label={`Remove ${source.label.trim() || "document"}`} onClick={() => setRemoving(true)}>Remove</button>
+          </div>
+          {removing ? <div className="slate-plugin-manager-confirm" role="alertdialog" aria-modal="true" aria-labelledby="slate-remove-heading" aria-describedby="slate-remove-description" onKeyDown={(event) => confirmationKeyDown(event, () => setRemoving(false))}>
+            <strong id="slate-remove-heading">Remove {source.label.trim() || "this document"}?</strong>
+            <p id="slate-remove-description">It will disappear from Slate. The Markdown file will not be deleted.</p>
+            <div><button className="slate-plugin-remove" onClick={remove}>Remove from Slate</button><button ref={keepDocumentRef} onClick={() => setRemoving(false)}>Keep document</button></div>
+          </div> : null}
+          <div className="slate-plugin-manager-fields">
+            <ManagerField label="Label" error={showValidation ? sourceErrors.label : undefined}><input aria-label="Label" aria-invalid={Boolean(showValidation && sourceErrors.label)} value={source.label} onChange={(event) => update({ label: event.target.value })} /></ManagerField>
+            <ManagerField label="View"><select aria-label="View" value={source.view} onChange={(event) => update({ view: event.target.value as SlateSourceDefinition["view"] })}><option value="markdown">Markdown</option><option value="markdown-tabs">Tabbed Markdown</option><option value="table">Table</option><option value="table-tabs">Tabbed tables</option></select></ManagerField>
+            <ManagerField wide label="Absolute Markdown path" error={showValidation ? sourceErrors.path : undefined} hint="Slate reads this declared file; it never searches the folder."><input aria-label="Absolute Markdown path" aria-invalid={Boolean(showValidation && sourceErrors.path)} value={source.path} onChange={(event) => update({ path: event.target.value })} placeholder="/absolute/path/to/document.md" /></ManagerField>
+          </div>
+          <details className="slate-plugin-manager-advanced" open={showValidation && Boolean(sourceErrors.id) ? true : undefined}>
+            <summary>Advanced</summary>
+            <ManagerField label="Document ID" error={showValidation ? sourceErrors.id : undefined} hint="Stable lowercase identifier used by Slate."><input aria-label="Document ID" aria-invalid={Boolean(showValidation && sourceErrors.id)} value={source.id} onChange={(event) => update({ id: event.target.value })} /></ManagerField>
+          </details>
+        </> : <div className="slate-plugin-manager-editor-empty"><strong>No document selected</strong><p>Add a document to create its Slate configuration.</p><button onClick={add}>Add document</button></div>}
+      </section>
+    </div>
+    {message ? <p className="slate-plugin-manager-message" role="alert">{message}</p> : null}
+    {discarding ? <div className="slate-plugin-manager-confirm slate-plugin-manager-discard" role="alertdialog" aria-modal="true" aria-labelledby="slate-discard-heading" aria-describedby="slate-discard-description" onKeyDown={(event) => confirmationKeyDown(event, () => setDiscarding(false))}>
+      <strong id="slate-discard-heading">Discard changes?</strong><p id="slate-discard-description">Your Slate configuration has not been changed.</p>
+      <div><button className="slate-plugin-remove" onClick={onCancel}>Discard changes</button><button ref={keepEditingRef} onClick={() => setDiscarding(false)}>Keep editing</button></div>
+    </div> : null}
+    <footer className="slate-plugin-manager-footer">
+      <span>{dirty ? "Unsaved changes" : `${sources.length} configured ${sources.length === 1 ? "document" : "documents"}`}</span>
+      <div><button className="slate-plugin-workspace-cancel" disabled={saving} onClick={cancel}>Cancel</button><button className="slate-plugin-workspace-connect" disabled={saving || !dirty} onClick={() => void save()}>{saving ? "Saving…" : "Save documents"}</button></div>
+    </footer>
+  </section>;
+}
+
+function ManagerField({ label, hint, error, wide, children }: { label: string; hint?: string; error?: string; wide?: boolean; children: ReactNode }) {
+  return <label className="slate-plugin-manager-field" data-wide={wide || undefined}><span>{label}</span>{children}{error ? <small className="slate-plugin-manager-field-error">{error}</small> : hint ? <small>{hint}</small> : null}</label>;
+}
+function SourceGroup({ label, sources, favoriteIds, onSelect, onToggleFavorite }: { label?: string; sources: Source[]; favoriteIds: string[]; onSelect: (id: string) => void; onToggleFavorite: (id: string) => void }) { return <section className="slate-plugin-source-group" aria-label={label}>{label ? <h2>{label === "Favorites" ? <span className="slate-plugin-favorites-glyph" aria-hidden="true">★</span> : null}{label}</h2> : null}<nav className="slate-plugin-sources" aria-label={label ? `Slate ${label.toLowerCase()}` : "Slate sources"}>{sources.map((source) => <SourceCard key={source.id} source={source} favorite={favoriteIds.includes(source.id)} onSelect={onSelect} onToggleFavorite={onToggleFavorite} />)}</nav></section>; }
 function SourceCard({ source, favorite, onSelect, onToggleFavorite }: { source: Source; favorite: boolean; onSelect: (id: string) => void; onToggleFavorite: (id: string) => void }) { const view = describeSlateView(source.view); return <article className="slate-plugin-source-card"><button className="slate-plugin-source-open" onClick={() => onSelect(source.id)}><span className="slate-plugin-source-glyph" aria-hidden="true">{view.glyph}</span><span className="slate-plugin-source-copy"><strong>{source.label}</strong><small>{view.description}</small></span></button><button className="slate-plugin-source-favorite" aria-label={favorite ? `Remove ${source.label} from favorites` : `Add ${source.label} to favorites`} aria-pressed={favorite} onClick={() => onToggleFavorite(source.id)} title={favorite ? "Remove from favorites" : "Add to favorites"}><span aria-hidden="true">{favorite ? "★" : "☆"}</span></button></article>; }
 function SourceDocument({ source, snapshot, onBack }: { source: Source; snapshot?: SlateSnapshot; onBack: () => void }) { return <><header className="slate-plugin-header"><p>Slate · local reference desk</p><h1>{source.label}</h1></header><button className="slate-plugin-back" onClick={onBack}>‹ Slate</button><div className="slate-plugin-panel-heading slate-plugin-panel-heading-meta"><LastEdited updatedAt={snapshot?.updatedAt} /></div><View source={source} snapshot={snapshot} /></>; }
 function LastEdited({ updatedAt }: { updatedAt?: number }) { if (!updatedAt) return null; const date = new Date(updatedAt); return <time className="slate-plugin-last-edited" dateTime={date.toISOString()}><span aria-hidden="true">◷</span> Updated {date.toLocaleString()}</time>; }
@@ -47,7 +285,7 @@ function Section({ section }: { section: ReturnType<typeof parseMarkdownSections
 function InlineMarkdown({ value }: { value: string }) { return <>{parseInlineMarkdown(value).map((token, index) => token.type === "strong" ? <strong key={index}>{token.value}</strong> : token.type === "link" ? <SlateExternalLink key={index} href={token.href}>{token.label}</SlateExternalLink> : <span key={index}>{token.value}</span>)}</>; }
 function SlateExternalLink({ href, children }: { href: string; children: string }) { const browser = typeof window === "undefined" ? undefined : window; const tauri = isSlateTauriRuntime(browser); const [error, setError] = useState<string>(); const open = async (event: MouseEvent<HTMLAnchorElement>) => { if (!tauri) return; event.preventDefault(); const message = await openSlateExternalUrl(href, (command, args) => invoke(command, args)); setError(message); }; return <><a href={href} onClick={open} rel="noreferrer" target={slateLinkTarget(browser)}>{children}</a>{error ? <span className="slate-plugin-link-error" role="alert">{error}</span> : null}</>; }
 function SlateStyles() { return <style>{`
-  .slate-plugin{--slate-canvas:${hostTheme.canvas};--slate-surface:${hostTheme.surface};--slate-surface-raised:${hostTheme["surface-raised"]};--slate-border:${hostTheme.border};--slate-text:${hostTheme.text};--slate-text-muted:${hostTheme["text-muted"]};--slate-accent:${hostTheme.accent};--slate-accent-strong:${hostTheme["accent-strong"]};--slate-accent-warm:${hostTheme["accent-warm"]};--slate-focus:${hostTheme["focus-ring"]};--slate-success:${hostTheme.success};--slate-warning:${hostTheme.warning};--slate-danger:${hostTheme.danger};--slate-gradient:linear-gradient(135deg,${hostTheme["gradient-start"]},${hostTheme["gradient-middle"]},${hostTheme["gradient-end"]});background:var(--slate-canvas);color:var(--slate-text);max-width:1040px;padding:4px 0 96px;font:14px/1.55 Inter,ui-sans-serif,system-ui,sans-serif}
+  .slate-plugin{--slate-canvas:${hostTheme.canvas};--slate-surface:${hostTheme.surface};--slate-surface-raised:${hostTheme["surface-raised"]};--slate-border:${hostTheme.border};--slate-text:${hostTheme.text};--slate-text-muted:${hostTheme["text-muted"]};--slate-accent:${hostTheme.accent};--slate-accent-strong:${hostTheme["accent-strong"]};--slate-accent-warm:${hostTheme["accent-warm"]};--slate-focus:${hostTheme["focus-ring"]};--slate-success:${hostTheme.success};--slate-warning:${hostTheme.warning};--slate-danger:${hostTheme.danger};--slate-favorite:${slateOwnedSemanticColors.favorite};--slate-gradient:linear-gradient(135deg,${hostTheme["gradient-start"]},${hostTheme["gradient-middle"]},${hostTheme["gradient-end"]});background:var(--slate-canvas);color:var(--slate-text);max-width:1040px;padding:4px 0 96px;font:14px/1.55 Inter,ui-sans-serif,system-ui,sans-serif}
   .slate-plugin h1{font-size:32px;line-height:1.1;margin:2px 0 0;letter-spacing:-.03em}
   .slate-plugin-header{border-bottom:1px solid var(--slate-border);padding:8px 0 13px}
   .slate-plugin-header p{color:var(--slate-accent);font-size:14px;font-weight:800;margin:0 0 4px;text-transform:uppercase;letter-spacing:.08em}
@@ -68,9 +306,53 @@ function SlateStyles() { return <style>{`
   .slate-plugin-workspace-note{color:var(--slate-text-muted);font-size:12px;line-height:1.55;margin:8px 0 0;max-width:510px}
   .slate-plugin-workspace-note code{color:var(--slate-text)}
   .slate-plugin-workspace-actions{display:flex;gap:8px;margin-top:16px}
-  .slate-plugin-manager fieldset{background:var(--slate-surface);border:1px solid var(--slate-border);color:var(--slate-text)}
-  .slate-plugin-manager legend{color:var(--slate-accent-warm)}
-  .slate-plugin-manager label{color:var(--slate-text)}
+  .slate-plugin-manager{max-width:960px}
+  .slate-plugin-manager-intro{align-items:center;display:flex;gap:24px;justify-content:space-between;margin:20px 0 18px}
+  .slate-plugin-manager-intro p{color:var(--slate-text);font-size:16px;font-weight:750;margin:0 0 2px}
+  .slate-plugin-manager-intro span{color:var(--slate-text-muted);font-size:12px}
+  .slate-plugin-manager-intro .slate-plugin-manager-order-note{display:block;margin-top:3px}
+  .slate-plugin-manager-add{background:var(--slate-surface)!important;border-color:var(--slate-accent-warm)!important;color:var(--slate-accent-warm)!important;font-weight:700;white-space:nowrap}
+  .slate-plugin-manager-layout{display:grid;grid-template-columns:minmax(220px,280px) minmax(0,1fr);min-height:410px;border-bottom:1px solid var(--slate-border);border-top:1px solid var(--slate-border)}
+  .slate-plugin-manager-index{border-right:1px solid var(--slate-border);padding:10px 12px 10px 0}
+  .slate-plugin-manager-index-row{align-items:center;border-left:3px solid transparent;display:grid;grid-template-columns:minmax(0,1fr) auto;margin:1px 0;padding-left:2px}
+  .slate-plugin-manager-index-row[data-selected=true]{background:var(--slate-surface-raised);border-left-color:var(--slate-accent)}
+  .slate-plugin-manager-index-open{align-items:center;background:transparent!important;border:0!important;display:flex;gap:10px;min-width:0;padding:9px 7px!important;text-align:left}
+  .slate-plugin-manager-index-open>span:last-child{display:grid;min-width:0}
+  .slate-plugin-manager-index-open strong{color:var(--slate-text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .slate-plugin-manager-index-open small{color:var(--slate-text-muted);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .slate-plugin-manager-index-glyph{color:var(--slate-accent);font-size:18px}
+  .slate-plugin-manager-reorder{display:flex;padding-right:4px}
+  .slate-plugin-manager-reorder button{background:transparent!important;border:0!important;color:var(--slate-text-muted)!important;font-size:14px!important;padding:5px!important}
+  .slate-plugin-manager-reorder button:hover:not(:disabled){color:var(--slate-accent-warm)!important}
+  .slate-plugin-manager-index-empty{color:var(--slate-text-muted);display:grid;gap:2px;padding:18px 12px}
+  .slate-plugin-manager-index-empty strong{color:var(--slate-text)}
+  .slate-plugin-manager-editor{min-width:0;padding:22px 0 26px 28px}
+  .slate-plugin-manager-editor-header{align-items:start;display:flex;gap:20px;justify-content:space-between;margin-bottom:22px}
+  .slate-plugin-manager-editor-header span{color:var(--slate-text-muted);font-size:11px;letter-spacing:.07em;text-transform:uppercase}
+  .slate-plugin-manager-editor-header h2{color:var(--slate-accent);font-size:22px;line-height:1.2;margin:3px 0 0}
+  .slate-plugin-manager-remove{background:transparent!important;border:0!important;color:var(--slate-danger)!important;font-size:12px!important;padding:4px!important}
+  .slate-plugin-manager-fields{display:grid;gap:16px;grid-template-columns:minmax(0,1.5fr) minmax(170px,.8fr)}
+  .slate-plugin-manager-field{color:var(--slate-text);display:grid;gap:6px;min-width:0}
+  .slate-plugin-manager-field[data-wide=true]{grid-column:1/-1}
+  .slate-plugin-manager-field>span{font-size:12px;font-weight:750}
+  .slate-plugin-manager-field input,.slate-plugin-manager-field select{box-sizing:border-box;min-width:0;width:100%}
+  .slate-plugin-manager-field small{color:var(--slate-text-muted);font-size:11px}
+  .slate-plugin-manager-field input[aria-invalid=true]{border-color:var(--slate-danger)}
+  .slate-plugin-manager-field-error{color:var(--slate-danger)!important}
+  .slate-plugin-manager-advanced{border-top:1px solid var(--slate-border);margin-top:22px;padding-top:13px}
+  .slate-plugin-manager-advanced summary{color:var(--slate-text-muted);cursor:pointer;font-size:12px;margin-bottom:14px}
+  .slate-plugin-manager-confirm{background:color-mix(in srgb,var(--slate-danger) 8%,var(--slate-canvas));border-left:3px solid var(--slate-danger);margin:0 0 20px;padding:12px 14px}
+  .slate-plugin-manager-confirm strong{color:var(--slate-text)}
+  .slate-plugin-manager-confirm p{color:var(--slate-text-muted);font-size:12px;margin:3px 0 10px}
+  .slate-plugin-manager-confirm>div{display:flex;gap:7px}
+  .slate-plugin-manager-message{color:var(--slate-danger);font-size:12px;margin:12px 0}
+  .slate-plugin-manager-discard{margin:14px 0 0}
+  .slate-plugin-manager-footer{align-items:center;background:var(--slate-canvas);bottom:0;display:flex;gap:20px;justify-content:space-between;padding:14px 0;position:sticky;z-index:2}
+  .slate-plugin-manager-footer>span{color:var(--slate-text-muted);font-size:12px}
+  .slate-plugin-manager-footer>div{display:flex;gap:8px}
+  .slate-plugin-manager-editor-empty,.slate-plugin-manager-state{color:var(--slate-text-muted);padding:30px 0}
+  .slate-plugin-manager-editor-empty strong,.slate-plugin-manager-state strong{color:var(--slate-text);font-size:16px}
+  .slate-plugin-manager-editor-empty p,.slate-plugin-manager-state p{margin:5px 0 14px}
   .slate-plugin-workspace-connect{background:var(--slate-accent)!important;border-color:var(--slate-accent)!important;color:var(--slate-canvas)!important;font-weight:800}
   .slate-plugin-workspace-connect:hover{background:var(--slate-accent-strong)!important;border-color:var(--slate-accent-strong)!important}
   .slate-plugin-workspace-disconnect,.slate-plugin-remove{background:transparent!important;border-color:var(--slate-danger)!important;color:var(--slate-danger)!important}
@@ -79,13 +361,14 @@ function SlateStyles() { return <style>{`
   .slate-plugin-workspace-cancel:hover{color:var(--slate-text)!important}
   .slate-plugin-source-group{margin:18px 0 25px}
   .slate-plugin-source-group h2{align-items:center;color:var(--slate-accent-warm);display:flex;font-size:13px;letter-spacing:.08em;margin:0 0 8px;text-transform:uppercase}
+  .slate-plugin-favorites-glyph{color:var(--slate-favorite);margin-right:5px}
   .slate-plugin-sources{display:grid;gap:10px;grid-template-columns:repeat(3,minmax(0,1fr))}
   .slate-plugin-source-card{background:var(--slate-surface);border:1px solid var(--slate-border);border-radius:8px;display:grid;grid-template-columns:minmax(0,1fr) auto;min-width:0;overflow:hidden}
   .slate-plugin-source-card:hover{background:var(--slate-surface-raised);border-color:var(--slate-accent)}
   .slate-plugin-source-open{align-items:center;background:transparent!important;border:0!important;border-radius:0!important;display:flex;gap:11px;min-width:0;padding:12px 4px 12px 13px!important;text-align:left}
   .slate-plugin-source-open:focus-visible{outline-offset:-3px}
   .slate-plugin-source-favorite{align-self:start;background:transparent!important;border:0!important;border-radius:0!important;color:var(--slate-text-muted)!important;font-size:21px!important;line-height:1!important;margin:7px 7px 0 0;padding:3px!important}
-  .slate-plugin-source-favorite:hover,.slate-plugin-source-favorite[aria-pressed=true]{color:var(--slate-accent-warm)!important}
+  .slate-plugin-source-favorite:hover,.slate-plugin-source-favorite[aria-pressed=true]{color:var(--slate-favorite)!important}
   .slate-plugin-source-favorite:focus-visible{outline-offset:0}
   .slate-plugin-source-glyph{color:var(--slate-accent);font-size:22px;line-height:1}
   .slate-plugin-source-copy{display:grid;gap:2px;min-width:0}
@@ -93,6 +376,7 @@ function SlateStyles() { return <style>{`
   .slate-plugin-source-copy small{color:var(--slate-text-muted);font-size:12px}
   .slate-plugin-back{background:transparent!important;border:0!important;border-radius:0!important;color:var(--slate-accent-warm)!important;margin:11px 0 0;padding:0!important}
   .slate-plugin-back:hover{color:var(--slate-text)!important}
+  .slate-plugin-secondary-back{font-weight:700!important;margin-top:14px}
   .slate-plugin-panel-heading{align-items:center;display:flex;justify-content:space-between;gap:16px;margin-top:13px}
   .slate-plugin-panel-heading-meta{justify-content:flex-end}
   .slate-plugin-panel-heading p{color:var(--slate-text);font-size:14px;font-weight:700;margin:0}
@@ -132,6 +416,6 @@ function SlateStyles() { return <style>{`
   .slate-plugin-tooltip-arrow{fill:var(--slate-text)}
   .slate-plugin-error{color:var(--slate-danger)}
   .slate-plugin-demo{color:var(--slate-text-muted);font-size:12px;margin:14px 0 0}
-  @media (max-width:760px){.slate-plugin-sources{grid-template-columns:repeat(2,minmax(0,1fr))}}
-  @media (max-width:520px){.slate-plugin-sources{grid-template-columns:1fr}.slate-plugin-source-header{align-items:start;flex-direction:column}.slate-plugin-workspace-tools{margin-top:4px}.slate-plugin-change-workspace{margin-top:0}}
+  @media (max-width:760px){.slate-plugin-sources{grid-template-columns:repeat(2,minmax(0,1fr))}.slate-plugin-manager-layout{grid-template-columns:1fr}.slate-plugin-manager-index{border-bottom:1px solid var(--slate-border);border-right:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));padding:10px 0}.slate-plugin-manager-editor{padding:22px 0}.slate-plugin-manager-index-empty{grid-column:1/-1}}
+  @media (max-width:520px){.slate-plugin-sources{grid-template-columns:1fr}.slate-plugin-source-header{align-items:start;flex-direction:column}.slate-plugin-workspace-tools{margin-top:4px}.slate-plugin-change-workspace{margin-top:0}.slate-plugin-manager-intro{align-items:start;flex-direction:column}.slate-plugin-manager-index{grid-template-columns:1fr}.slate-plugin-manager-fields{grid-template-columns:1fr}.slate-plugin-manager-footer{align-items:stretch;flex-direction:column}.slate-plugin-manager-footer>div{justify-content:flex-end}}
 `}</style>; }

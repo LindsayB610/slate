@@ -17,6 +17,14 @@ export const slateThemeFallbacks = {
   "gradient-end": "#ffe500",
 } as const;
 
+/**
+ * Slate-owned meanings that must remain stable when a host changes palette.
+ * A yellow star is the persistent, learned signal for a favorite document.
+ */
+export const slateOwnedSemanticColors = {
+  favorite: "#ffe500",
+} as const;
+
 export type SlateHostThemeToken = keyof typeof slateThemeFallbacks;
 
 export const slateHostThemeVariables = Object.fromEntries(

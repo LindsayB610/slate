@@ -3,7 +3,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { WorkshopToolView } from "../src/index.js";
-import { slateThemeFallbacks } from "../src/themeContract.js";
+import { slateOwnedSemanticColors, slateThemeFallbacks } from "../src/themeContract.js";
 
 function renderPreview(hostStyle?: Record<string, string>) {
   const host = document.createElement("div");
@@ -55,6 +55,16 @@ describe("mounted Slate host theme behavior", () => {
 
     expect(host.style.getPropertyValue("--workshop-accent")).toBe("#ff9f43");
     expect(host.contains(slate)).toBe(true);
+  });
+
+  it("does not recolor filled favorite stars with the host warm accent", () => {
+    renderPreview({ "--workshop-accent-warm": "#ffca6a" });
+    fireEvent.click(screen.getByRole("button", { name: "Add Tasks to favorites" }));
+
+    expect(screen.getByRole("button", { name: "Remove Tasks from favorites" }).getAttribute("aria-pressed")).toBe("true");
+    const css = slateStyles().textContent ?? "";
+    expect(css).toContain(`--slate-favorite:${slateOwnedSemanticColors.favorite}`);
+    expect(css).toContain("[aria-pressed=true]{color:var(--slate-favorite)!important}");
   });
 
   it("keeps portaled table tooltips inside Slate's themed subtree", async () => {

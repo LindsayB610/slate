@@ -41,7 +41,7 @@ describe("Slate Workshop plugin surface", () => {
   it("uses a responsive three-column source grid once Slate has six sources", () => {
     const pluginSource = readFileSync(new URL("../src/plugin.tsx", import.meta.url), "utf8");
     expect(pluginSource).toContain(".slate-plugin-sources{display:grid;gap:10px;grid-template-columns:repeat(3,minmax(0,1fr))}");
-    expect(pluginSource).toContain("@media (max-width:760px){.slate-plugin-sources{grid-template-columns:repeat(2,minmax(0,1fr))}}");
+    expect(pluginSource).toContain("@media (max-width:760px){.slate-plugin-sources{grid-template-columns:repeat(2,minmax(0,1fr))}");
     expect(pluginSource).toContain("@media (max-width:520px){.slate-plugin-sources{grid-template-columns:1fr}");
   });
 
@@ -74,10 +74,10 @@ describe("Slate Workshop plugin surface", () => {
     expect(pluginSource).toContain("Manage documents");
     expect(pluginSource).toContain("read_configured_markdown_config");
     expect(pluginSource).toContain("write_configured_markdown_config");
-    expect(pluginSource).toContain("Move up");
-    expect(pluginSource).toContain("Move down");
+    expect(pluginSource).toContain("Move ${label} up");
+    expect(pluginSource).toContain("Move ${label} down");
     expect(pluginSource).toContain("Remove");
-    expect(pluginSource).toContain("Documents themselves are never edited");
+    expect(pluginSource).toContain("Markdown files are never edited");
   });
 
   it("gives a remembered but inaccessible folder a specific recovery path", () => {

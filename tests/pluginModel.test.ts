@@ -17,6 +17,7 @@ describe("Slate plugin refresh boundary", () => {
   });
 
   it("accepts only unique Slate-owned source metadata and supported views", () => {
+    expect(validateSourceMetadata([])).toEqual([]);
     expect(validateSourceMetadata([{ id: "tasks", label: "Tasks", view: "table-tabs" }])).toEqual([{ id: "tasks", label: "Tasks", view: "table-tabs" }]);
     expect(validateSourceMetadata([{ id: "tasks", label: "Tasks", view: "unknown" }])).toBeNull();
     expect(validateSourceMetadata([{ id: "tasks", label: "Tasks", view: "markdown" }, { id: "tasks", label: "Again", view: "table" }])).toBeNull();

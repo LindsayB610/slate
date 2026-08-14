@@ -3,7 +3,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { WorkshopToolView } from "../src/index.js";
-import { slateHostThemeVariables, slateThemeFallbacks } from "../src/themeContract.js";
+import { slateHostThemeVariables, slateOwnedSemanticColors, slateThemeFallbacks } from "../src/themeContract.js";
 
 const expectedHostTokens = [
   "canvas",
@@ -50,6 +50,11 @@ describe("Slate host theme contract", () => {
     });
   });
 
+  it("keeps the favorite affordance recognizably yellow across host palettes", () => {
+    expect(slateOwnedSemanticColors.favorite).toBe("#ffe500");
+    expect(slateOwnedSemanticColors.favorite).not.toContain("workshop");
+  });
+
   it("renders the embedded-token path and every no-host fallback into Slate's scoped stylesheet", () => {
     const markup = renderToStaticMarkup(
       createElement(WorkshopToolView, { requestWorkspaceRoot: () => undefined }),
@@ -60,6 +65,8 @@ describe("Slate host theme contract", () => {
     expect(markup).toContain(".slate-plugin{");
     expect(markup).toContain("background:var(--slate-canvas)");
     expect(markup).toContain("outline:2px solid var(--slate-focus)");
+    expect(markup).toContain(`--slate-favorite:${slateOwnedSemanticColors.favorite}`);
+    expect(markup).toContain("[aria-pressed=true]{color:var(--slate-favorite)!important}");
   });
 
   it("scopes theme consumption to Slate and does not import Workshop implementation", () => {

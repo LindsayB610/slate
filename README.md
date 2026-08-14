@@ -93,6 +93,8 @@ save leaves the draft visible with an error so it can be corrected or canceled.
 
 The manager permits an empty document list. That leaves Slate connected and
 shows its "No documents configured" state until a source is added again.
+The manager's arrows change the order stored in the private configuration;
+the Slate home shelves remain alphabetized by visible label.
 Each source needs a unique lowercase, hyphenated `id`, a human-readable
 `label`, an absolute Markdown `path`, and a supported `view`.
 
@@ -153,6 +155,8 @@ When no source is starred, Slate shows only the normal source grid—there is no
 empty Favorites section. Favorites are a Slate-local preference scoped to the
 selected private workspace. They do not modify `slate.config.json`, Markdown
 files, or Workshop, and they do not sync across computers.
+Filled favorite stars deliberately remain yellow across host themes so the
+learned favorite signal does not change when the surrounding palette does.
 
 ## Privacy model
 
