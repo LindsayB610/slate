@@ -51,6 +51,7 @@ function isSafeSlateLink(value: string): boolean { return /^(https?:|mailto:)/i.
 
 export function describeSlateView(view: SlateSourceMetadata["view"]): { glyph: string; description: string } {
   if (view === "markdown-tabs") return { glyph: "☷", description: "Tabbed Markdown reference" };
+  if (view === "table-tabs") return { glyph: "▤", description: "Tabbed sortable tables" };
   if (view === "table") return { glyph: "▦", description: "Sortable table" };
   return { glyph: "≡", description: "Markdown reference" };
 }

@@ -9,9 +9,10 @@ describe("Slate configuration", () => {
         { id: "tasks", label: "Tasks", path: "/private/tasks.md", view: "markdown-tabs" },
         { id: "notes", label: "Notes", path: "/private/notes.md", view: "markdown" },
         { id: "inventory", label: "Inventory", path: "/private/inventory.md", view: "table" },
-        { id: "archive", label: "Archive", path: "/private/archive.md", view: "markdown" }
+        { id: "archive", label: "Archive", path: "/private/archive.md", view: "table-tabs" },
+        { id: "reference", label: "Reference", path: "/private/reference.md", view: "markdown" }
       ]
-    }))).toMatchObject({ ok: true, config: { version: 1, sources: expect.arrayContaining([expect.objectContaining({ id: "archive", view: "markdown" })]) } });
+    }))).toMatchObject({ ok: true, config: { version: 1, sources: expect.arrayContaining([expect.objectContaining({ id: "archive", view: "table-tabs" })]) } });
   });
 
   it.each([

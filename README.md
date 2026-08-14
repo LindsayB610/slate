@@ -50,6 +50,12 @@ unique local Markdown files.
       "label": "Inventory",
       "path": "/absolute/path/to/inventory.md",
       "view": "table"
+    },
+    {
+      "id": "archive",
+      "label": "Archive",
+      "path": "/absolute/path/to/archive.md",
+      "view": "table-tabs"
     }
   ]
 }
@@ -64,6 +70,10 @@ Supported views:
   before its primary data table. “Largest” means the most body rows; if tables
   tie, Slate uses the first one. A valid table needs a header row and Markdown
   separator row.
+- `table-tabs` keeps a divider-delimited document title and intro above a row
+  of tabs, then renders the largest valid Markdown table inside the selected
+  top-level-heading tab. Tables are never selected from another tab. A tab with
+  no valid table shows an in-place message instead of failing the document.
 
 ## Privacy model
 

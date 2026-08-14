@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseMarkdownSections, parseMarkdownTable, buildTopLevelTabs, splitTabbedDocument } from "../src/index.js";
+import { parseMarkdownSections, parseMarkdownTable, parseScopedMarkdownTable, buildTopLevelTabs, splitTabbedDocument } from "../src/index.js";
 
 describe("Slate presentation models", () => {
   it("groups Markdown sections under top-level tabs when requested", () => {
@@ -16,6 +16,25 @@ describe("Slate presentation models", () => {
     const document = splitTabbedDocument(parseMarkdownSections("# Current operating state\n---\n# 🎨 Creative\n## Current state"));
     expect(document.intro.map((section) => section.heading)).toEqual(["Current operating state"]);
     expect(document.tabs.map((tab) => tab.label)).toEqual(["🎨 Creative"]);
+  });
+
+  it("keeps a divider-delimited table archive intro above date tabs", () => {
+    const document = splitTabbedDocument(parseMarkdownSections(`# Run archive
+Reports are kept here.
+---
+# Aug 13, 2026
+Short run summary.
+| Priority | Keyword |
+| --- | --- |
+| 1 | First |
+
+# Aug 20, 2026
+| Priority | Keyword |
+| --- | --- |
+| 1 | Second |`));
+
+    expect(document.intro.map((section) => section.heading)).toEqual(["Run archive"]);
+    expect(document.tabs.map((tab) => tab.label)).toEqual(["Aug 13, 2026", "Aug 20, 2026"]);
   });
 
   it("preserves simple Markdown sections without imposing tabs", () => {
@@ -38,6 +57,43 @@ describe("Slate presentation models", () => {
 | South | Blair | Call |`);
     expect(table.headers).toEqual(["Name", "Owner", "Next action"]);
     expect(table.rows).toHaveLength(2);
+  });
+
+  it("selects tables only within the requested date tab", () => {
+    const document = splitTabbedDocument(parseMarkdownSections(`# Run archive
+---
+# Aug 13, 2026
+| Keyword | Score |
+| --- | --- |
+| First | 71 |
+
+# Aug 20, 2026
+| Keyword | Score |
+| --- | --- |
+| Second | 62 |
+| Third | 55 |`));
+    const first = parseScopedMarkdownTable(document.tabs[0].sections);
+    const second = parseScopedMarkdownTable(document.tabs[1].sections);
+
+    expect(first).toMatchObject({ ok: true, table: { rows: [["First", "71"]] } });
+    expect(second).toMatchObject({ ok: true, table: { rows: [["Second", "62"], ["Third", "55"]] } });
+  });
+
+  it("handles a table-less date tab without borrowing a sibling tab's table", () => {
+    const document = splitTabbedDocument(parseMarkdownSections(`# Run archive
+---
+# Aug 13, 2026
+| Keyword | Score |
+| --- | --- |
+| First | 71 |
+
+# Aug 20, 2026
+No table was generated for this run.`));
+
+    expect(parseScopedMarkdownTable(document.tabs[1].sections)).toEqual({
+      ok: false,
+      message: "This tab does not contain a valid Markdown table.",
+    });
   });
 
   it("treats Markdown link and HTML syntax as text rather than executable markup", () => {

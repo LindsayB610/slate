@@ -1,4 +1,4 @@
-export const slateViewFormats = ["markdown-tabs", "markdown", "table"] as const;
+export const slateViewFormats = ["markdown-tabs", "markdown", "table", "table-tabs"] as const;
 export type SlateViewFormat = (typeof slateViewFormats)[number];
 
 export type SlateSourceDefinition = {
@@ -35,6 +35,10 @@ export type MarkdownTable = {
   headers: string[];
   rows: string[][];
 };
+
+export type ScopedMarkdownTableResult =
+  | { ok: true; table: MarkdownTable }
+  | { ok: false; message: string };
 
 export type SlatePluginManifest = {
   id: "slate";
@@ -176,6 +180,27 @@ export function parseMarkdownTable(markdown: string): MarkdownTable {
   }
   if (!tables.length) throw new Error("Slate table view requires a Markdown table with a header and separator row.");
   return tables.reduce((largest, table) => table.rows.length > largest.rows.length ? table : largest);
+}
+
+/**
+ * Rebuilds parsed sections as Markdown for a tab-local operation. This keeps
+ * table selection confined to the active tab rather than the whole document.
+ */
+export function markdownFromSections(sections: MarkdownSection[]): string {
+  return sections.flatMap((section) => [
+    `${"#".repeat(section.level)} ${section.heading}`,
+    ...section.paragraphs,
+    ...section.items.map((item) => `- ${item}`),
+  ]).join("\n");
+}
+
+/** Returns a table result for one tab only; it never searches sibling tabs. */
+export function parseScopedMarkdownTable(sections: MarkdownSection[]): ScopedMarkdownTableResult {
+  try {
+    return { ok: true, table: parseMarkdownTable(markdownFromSections(sections)) };
+  } catch {
+    return { ok: false, message: "This tab does not contain a valid Markdown table." };
+  }
 }
 
 function isSourceDefinition(value: unknown): value is SlateSourceDefinition {
