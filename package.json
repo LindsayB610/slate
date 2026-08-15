@@ -2,6 +2,7 @@
   "name": "slate-core",
   "version": "0.1.0",
   "description": "Generic local-first Markdown source definitions and presentation models for Workshop.",
+  "license": "MIT",
   "type": "module",
   "exports": {
     ".": {

@@ -28,6 +28,7 @@ try {
   }
   const manifest = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
   if (manifest.exports?.["."]?.default !== "./dist/index.js") throw new Error("Slate package export is not consumer-ready.");
+  if (manifest.license !== "MIT") throw new Error("Slate package metadata must declare the MIT license.");
 
   const consumerRoot = join(temporaryRoot, "consumer");
   mkdirSync(consumerRoot);

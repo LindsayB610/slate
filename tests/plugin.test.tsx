@@ -91,4 +91,11 @@ describe("Slate Workshop plugin surface", () => {
     const packageJson = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as { dependencies?: Record<string, string>; devDependencies?: Record<string, string> };
     expect({ ...packageJson.dependencies, ...packageJson.devDependencies }).not.toHaveProperty("@tauri-apps/plugin-opener");
   });
+
+  it("publishes explicit MIT package metadata with the canonical copyright", () => {
+    const packageJson = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as { license?: string };
+    const license = readFileSync(new URL("../LICENSE", import.meta.url), "utf8");
+    expect(packageJson.license).toBe("MIT");
+    expect(license).toContain("Copyright (c) 2026 Lindsay Brunner");
+  });
 });
