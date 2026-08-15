@@ -27,6 +27,23 @@ describe("mounted document manager", () => {
     expect(screen.getByText(/Arrows change configuration order; Slate home stays alphabetical/)).toBeTruthy();
   });
 
+  it("uses native form submission for document edits without turning secondary actions into submits", async () => {
+    openManager();
+    const label = screen.getByLabelText("Label") as HTMLInputElement;
+    const form = label.closest("form");
+    expect(form).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Save documents" }).getAttribute("type")).toBe("submit");
+    for (const button of within(form!).getAllByRole("button").filter((item) => item.textContent !== "Save documents")) {
+      expect(button.getAttribute("type")).toBe("button");
+    }
+
+    fireEvent.change(label, { target: { value: "Renamed tasks" } });
+    fireEvent.submit(form!);
+
+    expect(await screen.findByText("Renamed tasks")).toBeTruthy();
+    expect(screen.getByText("Preview data — native Workshop uses only your configured local files.")).toBeTruthy();
+  });
+
   it("returns to Slate from the manager", () => {
     openManager();
     fireEvent.click(screen.getByRole("button", { name: "Back to Slate" }));

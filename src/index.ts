@@ -81,6 +81,7 @@ export const workshopPluginDeclaration = {
 };
 
 export { WorkshopToolView } from "./plugin.js";
+export type { BrowseWorkspaceRoot, WorkshopToolViewProps, WorkspaceRootBrowseResult, WorkspaceRootRequestResult } from "./plugin.js";
 
 export function parseSlateConfig(contents: string): SlateConfigResult {
   let value: unknown;

@@ -15,17 +15,38 @@ function createSlateDemoConfigSources(): SlateSourceDefinition[] {
   return slateDemoSources.map((source) => ({ ...source, path: `/preview/${source.id}.md` }));
 }
 export type WorkspaceRootRequestResult = { ok: true } | { ok: false; message: string };
-export type WorkshopToolViewProps = { activeRouteId?: string; workspaceRoot?: string; requestWorkspaceRoot: (root?: string) => WorkspaceRootRequestResult | void; clearWorkspaceRoot?: () => void };
+export type WorkspaceRootBrowseResult = { ok: true; root: string } | { ok: false; canceled?: boolean; message?: string };
+export type BrowseWorkspaceRoot = () => WorkspaceRootBrowseResult | void | Promise<WorkspaceRootBrowseResult | void>;
+export type WorkshopToolViewProps = { activeRouteId?: string; workspaceRoot?: string; requestWorkspaceRoot: (root?: string) => WorkspaceRootRequestResult | void; browseWorkspaceRoot?: BrowseWorkspaceRoot; clearWorkspaceRoot?: () => void };
+type WorkspaceNotice = { state: "loading" | "success"; text: string };
+type WorkspacePhase = "loading" | "loaded" | "error";
 
-export function WorkshopToolView({ workspaceRoot, requestWorkspaceRoot, clearWorkspaceRoot }: WorkshopToolViewProps) {
+export function WorkshopToolView({ workspaceRoot, requestWorkspaceRoot, browseWorkspaceRoot, clearWorkspaceRoot }: WorkshopToolViewProps) {
   const [root, setRoot] = useState(""); const [sources, setSources] = useState<Source[]>([]); const [selected, setSelected] = useState<string>();
-  const [data, setData] = useState<Record<string, SlateSnapshot>>({}); const [error, setError] = useState<string>(); const [managing, setManaging] = useState(false); const [reload, setReload] = useState(0); const [favoriteIds, setFavoriteIds] = useState<string[]>(() => loadSlateFavoriteSourceIds(slateLocalStorage(), workspaceRoot ?? "")); const versions = useRef<Record<string, number>>({});
+  const [data, setData] = useState<Record<string, SlateSnapshot>>({}); const [error, setError] = useState<string>(); const [workspaceNotice, setWorkspaceNotice] = useState<WorkspaceNotice>(); const [managing, setManaging] = useState(false); const [reload, setReload] = useState(0); const [favoriteIds, setFavoriteIds] = useState<string[]>(() => loadSlateFavoriteSourceIds(slateLocalStorage(), workspaceRoot ?? "")); const [loadedWorkspaceRoot, setLoadedWorkspaceRoot] = useState<string>(); const [failedWorkspaceRoot, setFailedWorkspaceRoot] = useState<string>(); const versions = useRef<Record<string, number>>({}); const previousWorkspaceRoot = useRef(workspaceRoot); const pendingWorkspaceConfirmation = useRef(false);
   useEffect(() => { setFavoriteIds(loadSlateFavoriteSourceIds(slateLocalStorage(), workspaceRoot ?? "")); }, [workspaceRoot]);
+  useEffect(() => {
+    const previous = previousWorkspaceRoot.current;
+    if (workspaceRoot !== previous) {
+      setSources([]); setSelected(undefined); setData({}); setManaging(false); setLoadedWorkspaceRoot(undefined); setFailedWorkspaceRoot(undefined); versions.current = {};
+    }
+    if (workspaceRoot && workspaceRoot !== previous) {
+      pendingWorkspaceConfirmation.current = true;
+      setWorkspaceNotice({ state: "loading", text: previous ? "Slate folder changed. Loading configured documents…" : "Folder selected. Loading configured documents…" });
+    } else if (!workspaceRoot) {
+      pendingWorkspaceConfirmation.current = false;
+      setWorkspaceNotice(undefined);
+    }
+    previousWorkspaceRoot.current = workspaceRoot;
+  }, [workspaceRoot]);
   const read = useCallback(async (id: string, active: () => boolean = () => true) => { if (!workspaceRoot) return; const version = (versions.current[id] ?? 0) + 1; versions.current[id] = version; try { const result = await invoke<SlateSnapshot>("read_configured_markdown_source", { workspaceRoot, configFile, source: id }); if (!active()) return; setData((old) => keepLatestSnapshot(old, id, version, versions.current[id], result)); if (versions.current[id] === version) setError(undefined); } catch { if (active() && versions.current[id] === version) setError("Slate couldn't refresh this document. It will keep the last good view when one is available."); } }, [workspaceRoot]);
-  useEffect(() => { if (!workspaceRoot) return; let disposed = false; let stop: (() => void) | undefined; const active = () => !disposed; void (async () => { try { const raw = await invoke<unknown>("read_configured_markdown_sources", { workspaceRoot, configFile }); if (!active()) return; const listed = validateSourceMetadata(raw); if (!listed) throw new Error("Slate configuration contains unsupported source metadata."); setSources(listed); setSelected((old) => retainSelectedSource(old, listed)); await Promise.all(listed.map((source) => read(source.id, active))); if (!active()) return; const lateStop = await listen<SlateSourceChange>("local-markdown://source-changed", (event) => { if (shouldRefreshSource(workspaceRoot, event.payload, configFile)) void read(event.payload.source, active); }); if (releaseIfDisposed(disposed, lateStop)) return; stop = lateStop; await invoke("start_configured_markdown_watch", { workspaceRoot, configFile }); } catch { if (active()) setError("Slate couldn't open this folder. Check that it still exists, Workshop has access to it, and it contains a valid slate.config.json. Then use Change Slate folder to try again."); } })(); return () => { disposed = true; stop?.(); }; }, [workspaceRoot, read, reload]);
+  useEffect(() => { if (!workspaceRoot) return; let disposed = false; let stop: (() => void) | undefined; const active = () => !disposed; setError(undefined); setFailedWorkspaceRoot(undefined); void (async () => { try { const raw = await invoke<unknown>("read_configured_markdown_sources", { workspaceRoot, configFile }); if (!active()) return; const listed = validateSourceMetadata(raw); if (!listed) throw new Error("Slate configuration contains unsupported source metadata."); setSources(listed); setSelected((old) => retainSelectedSource(old, listed)); setLoadedWorkspaceRoot(workspaceRoot); await Promise.all(listed.map((source) => read(source.id, active))); if (!active()) return; const lateStop = await listen<SlateSourceChange>("local-markdown://source-changed", (event) => { if (shouldRefreshSource(workspaceRoot, event.payload, configFile)) void read(event.payload.source, active); }); if (releaseIfDisposed(disposed, lateStop)) return; stop = lateStop; await invoke("start_configured_markdown_watch", { workspaceRoot, configFile }); if (active() && pendingWorkspaceConfirmation.current) { pendingWorkspaceConfirmation.current = false; setWorkspaceNotice({ state: "success", text: "Slate folder connected." }); } } catch { if (active()) { setSources([]); setSelected(undefined); setData({}); setLoadedWorkspaceRoot(undefined); setFailedWorkspaceRoot(workspaceRoot); pendingWorkspaceConfirmation.current = false; setWorkspaceNotice(undefined); setError("Slate couldn't open this folder. Check that it still exists, Workshop has access to it, and it contains a valid slate.config.json. Then use Change Slate folder to try again."); } } })(); return () => { disposed = true; stop?.(); }; }, [workspaceRoot, read, reload]);
   if (!workspaceRoot && isBrowserPreview() && !isSetupPreview()) return <DemoSlate />;
-  if (!workspaceRoot) return <SlateRoot><SlateWorkspaceSetup initialRoot={root} onRootChange={setRoot} requestWorkspaceRoot={requestWorkspaceRoot} /></SlateRoot>;
-  const source = sources.find((item) => item.id === selected); return <SlateRoot>{managing ? <ManageDocuments workspaceRoot={workspaceRoot} onDone={() => { setManaging(false); setReload((value) => value + 1); }} /> : source ? <SourceDocument source={source} snapshot={data[source.id]} onBack={() => setSelected(undefined)} /> : <SourcePicker sources={sources} favoriteIds={favoriteIds} onSelect={setSelected} onManage={() => setManaging(true)} onToggleFavorite={(id) => setFavoriteIds((current) => { const next = toggleSlateFavoriteSourceId(current, id); saveSlateFavoriteSourceIds(slateLocalStorage(), workspaceRoot, next); return next; })} workspaceRoot={workspaceRoot} requestWorkspaceRoot={requestWorkspaceRoot} clearWorkspaceRoot={clearWorkspaceRoot} />}{error && <p className="slate-plugin-error" role="alert">{error}</p>}</SlateRoot>;
+  if (!workspaceRoot) return <SlateRoot><SlateWorkspaceSetup initialRoot={root} onRootChange={setRoot} requestWorkspaceRoot={requestWorkspaceRoot} browseWorkspaceRoot={browseWorkspaceRoot} /></SlateRoot>;
+  const workspacePhase: WorkspacePhase = failedWorkspaceRoot === workspaceRoot ? "error" : loadedWorkspaceRoot === workspaceRoot ? "loaded" : "loading";
+  const visibleSources = workspacePhase === "loaded" ? sources : [];
+  const visibleData = workspacePhase === "loaded" ? data : {};
+  const source = visibleSources.find((item) => item.id === selected); return <SlateRoot>{managing && workspacePhase === "loaded" ? <ManageDocuments workspaceRoot={workspaceRoot} onDone={() => { setManaging(false); setSources([]); setSelected(undefined); setLoadedWorkspaceRoot(undefined); setFailedWorkspaceRoot(undefined); setReload((value) => value + 1); }} /> : source ? <SourceDocument source={source} snapshot={visibleData[source.id]} onBack={() => setSelected(undefined)} /> : <SourcePicker sources={visibleSources} phase={workspacePhase} favoriteIds={favoriteIds} onSelect={setSelected} onManage={() => setManaging(true)} onToggleFavorite={(id) => setFavoriteIds((current) => { const next = toggleSlateFavoriteSourceId(current, id); saveSlateFavoriteSourceIds(slateLocalStorage(), workspaceRoot, next); return next; })} workspaceRoot={workspaceRoot} requestWorkspaceRoot={requestWorkspaceRoot} browseWorkspaceRoot={browseWorkspaceRoot} clearWorkspaceRoot={clearWorkspaceRoot} notice={workspaceNotice} onDismissNotice={() => setWorkspaceNotice(undefined)} onRefreshWorkspace={() => { setSources([]); setSelected(undefined); setData({}); setLoadedWorkspaceRoot(undefined); setFailedWorkspaceRoot(undefined); versions.current = {}; pendingWorkspaceConfirmation.current = true; setWorkspaceNotice({ state: "loading", text: "Refreshing Slate folder access…" }); setReload((value) => value + 1); }} />}{error && <p className="slate-plugin-error" role="alert">{error}</p>}</SlateRoot>;
 }
 function SlateRoot({ children }: { children: ReactNode }) { const [portalContainer, setPortalContainer] = useState<HTMLElement | null>(null); return <main className="slate-plugin"><SlateStyles /><SlatePortalContext.Provider value={portalContainer}>{children}<div className="slate-plugin-portal" ref={setPortalContainer} /></SlatePortalContext.Provider></main>; }
 function DemoSlate() {
@@ -39,23 +60,113 @@ function DemoSlate() {
     ? <DocumentManagerEditor initialSources={demoSources} onCancel={() => setManaging(false)} onSave={async (next) => { setDemoSources(next); setManaging(false); }} />
     : source
       ? <SourceDocument source={source} snapshot={slateDemoSnapshots[source.id]} onBack={() => setSelected(undefined)} />
-      : <><SourcePicker sources={metadata} favoriteIds={favoriteIds} onSelect={setSelected} onManage={() => setManaging(true)} onToggleFavorite={(id) => setFavoriteIds((current) => { const next = toggleSlateFavoriteSourceId(current, id); saveSlateFavoriteSourceIds(slateLocalStorage(), "slate-demo", next); return next; })} /><p className="slate-plugin-demo">Preview data — native Workshop uses only your configured local files.</p></>}
+      : <><SourcePicker sources={metadata} phase="loaded" favoriteIds={favoriteIds} onSelect={setSelected} onManage={() => setManaging(true)} onToggleFavorite={(id) => setFavoriteIds((current) => { const next = toggleSlateFavoriteSourceId(current, id); saveSlateFavoriteSourceIds(slateLocalStorage(), "slate-demo", next); return next; })} /><p className="slate-plugin-demo">Preview data — native Workshop uses only your configured local files.</p></>}
   </SlateRoot>;
 }
 function slateLocalStorage() { try { return typeof window === "undefined" ? undefined : window.localStorage; } catch { return undefined; } }
 function isSetupPreview(): boolean { return typeof window !== "undefined" && new URLSearchParams(window.location.search).has("setup"); }
-function SlateWorkspaceSetup({ initialRoot, onRootChange, requestWorkspaceRoot, onCancel }: { initialRoot: string; onRootChange: (root: string) => void; requestWorkspaceRoot: (root?: string) => WorkspaceRootRequestResult | void; onCancel?: () => void }) { const [candidate, setCandidate] = useState(initialRoot); const [message, setMessage] = useState<string>(); const connect = () => { if (!candidate.trim()) { setMessage("Enter the folder path first."); return; } const result = requestWorkspaceRoot(candidate.trim()); if (result && !result.ok) { setMessage(result.message); return; } setMessage(undefined); onRootChange(candidate); }; return <section className="slate-plugin-workspace-setup" aria-labelledby="slate-folder-heading"><header className="slate-plugin-header"><p>Slate · local reference desk</p><h1 id="slate-folder-heading">{onCancel ? "Use a different folder" : "Connect a Slate folder"}</h1></header>{onCancel ? <button className="slate-plugin-back slate-plugin-secondary-back" aria-label="Back to Slate" onClick={onCancel}>← Back to Slate</button> : null}<p className="slate-plugin-workspace-lede">{onCancel ? "Replace the current private Slate folder." : "Choose the private folder that holds this Slate setup."}</p><label className="slate-plugin-workspace-field"><span>Folder containing slate.config.json</span><input aria-label="Folder containing slate.config.json" value={candidate} onChange={(event) => { setCandidate(event.target.value); onRootChange(event.target.value); }} placeholder="/absolute/path/to/slate" /></label><p className="slate-plugin-workspace-note">The folder must already contain <code>slate.config.json</code>. Slate does not search this folder or create files in it.</p>{message ? <p className="slate-plugin-error" role="alert">{message}</p> : null}<div className="slate-plugin-workspace-actions"><button className="slate-plugin-workspace-connect" onClick={connect}>Connect folder</button></div></section>; }
+function SlateWorkspaceSetup({ initialRoot, connectedRoot, onRootChange, requestWorkspaceRoot, browseWorkspaceRoot, onCancel, onReconnect }: { initialRoot: string; connectedRoot?: string; onRootChange: (root: string) => void; requestWorkspaceRoot: (root?: string) => WorkspaceRootRequestResult | void; browseWorkspaceRoot?: BrowseWorkspaceRoot; onCancel?: () => void; onReconnect?: () => void }) {
+  const [candidate, setCandidate] = useState(initialRoot);
+  const [message, setMessage] = useState<{ tone: "status" | "error"; text: string }>();
+  const [connecting, setConnecting] = useState(false);
+  const [browsing, setBrowsing] = useState(false);
+  const mounted = useRef(true);
+  const connectButton = useRef<HTMLButtonElement>(null);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  const busy = connecting || browsing;
+  const connect = () => {
+    const nextRoot = candidate.trim();
+    if (!nextRoot) { setMessage({ tone: "error", text: "Enter a folder path first." }); return; }
+    setConnecting(true);
+    try {
+      const result = requestWorkspaceRoot(nextRoot);
+      if (result && !result.ok) { setMessage({ tone: "error", text: result.message }); setConnecting(false); return; }
+      if (connectedRoot && nextRoot === connectedRoot) {
+        onReconnect?.();
+        return;
+      }
+      setMessage({ tone: "status", text: "Folder selected. Waiting for Workshop to finish connecting…" });
+      onRootChange(nextRoot);
+    } catch {
+      setMessage({ tone: "error", text: "Slate couldn't request this folder. Try again." });
+      setConnecting(false);
+    }
+  };
+  const browse = async () => {
+    if (!browseWorkspaceRoot) return;
+    setBrowsing(true);
+    setMessage({ tone: "status", text: "Opening folder browser…" });
+    try {
+      const result = await browseWorkspaceRoot();
+      if (!mounted.current) return;
+      if (!result || (!result.ok && result.canceled)) { setBrowsing(false); setMessage(undefined); return; }
+      if (!result.ok) {
+        setBrowsing(false);
+        setMessage({ tone: "error", text: result.message ?? "Workshop couldn't open the folder browser. Enter the path manually or try again." });
+        return;
+      }
+      const selectedRoot = result.root.trim();
+      if (!selectedRoot) {
+        setBrowsing(false);
+        setMessage({ tone: "error", text: "Workshop returned an empty folder path. Enter the path manually or try again." });
+        return;
+      }
+      setCandidate(selectedRoot);
+      onRootChange(selectedRoot);
+      setBrowsing(false);
+      setMessage({ tone: "status", text: "Folder selected. Connect when you're ready." });
+      setTimeout(() => connectButton.current?.focus(), 0);
+    } catch {
+      if (!mounted.current) return;
+      setBrowsing(false);
+      setMessage({ tone: "error", text: "Workshop couldn't open the folder browser. Enter the path manually or try again." });
+    }
+  };
+  return <section className="slate-plugin-workspace-setup" aria-labelledby="slate-folder-heading">
+    <header className="slate-plugin-header"><p>Slate · local reference desk</p><h1 id="slate-folder-heading">{onCancel ? "Use a different folder" : "Connect a Slate folder"}</h1></header>
+    {onCancel ? <button className="slate-plugin-back slate-plugin-secondary-back" aria-label="Back to Slate" onClick={onCancel}>← Back to Slate</button> : null}
+    <form onSubmit={(event) => { event.preventDefault(); connect(); }}>
+      <p className="slate-plugin-workspace-lede">{onCancel ? "Replace the current private Slate folder." : "Choose the private folder that holds this Slate setup."}</p>
+      <div className="slate-plugin-workspace-field">
+        <label htmlFor="slate-workspace-root">Folder containing slate.config.json</label>
+        <div className="slate-plugin-workspace-path-row">
+          <input id="slate-workspace-root" aria-label="Folder containing slate.config.json" aria-describedby="slate-workspace-note" value={candidate} disabled={busy} onChange={(event) => { setCandidate(event.target.value); onRootChange(event.target.value); setMessage(undefined); }} placeholder="/absolute/path/to/slate" />
+          {browseWorkspaceRoot ? <button type="button" className="slate-plugin-workspace-browse" aria-label={browsing ? "Browsing…" : "Browse for Slate folder"} disabled={busy} onClick={() => { void browse(); }}>{browsing ? "Browsing…" : "Browse…"}</button> : null}
+        </div>
+      </div>
+      <p id="slate-workspace-note" className="slate-plugin-workspace-note">Type an absolute path or browse. The folder must already contain <code>slate.config.json</code>. Slate does not search this folder or create files in it.</p>
+      {message ? <p className={message.tone === "status" ? "slate-plugin-workspace-status" : "slate-plugin-error"} role={message.tone === "status" ? "status" : "alert"}>{message.text}</p> : null}
+      <div className="slate-plugin-workspace-actions"><button ref={connectButton} type="submit" className="slate-plugin-workspace-connect" disabled={busy}>{connecting ? "Connecting…" : "Connect folder"}</button></div>
+    </form>
+  </section>;
+}
 function SlateWorkspaceDisconnect({ onConfirm, onCancel }: { onConfirm: () => void; onCancel: () => void }) { return <section className="slate-plugin-workspace-setup" aria-labelledby="slate-disconnect-heading"><header className="slate-plugin-header"><p>Slate · local reference desk</p><h1 id="slate-disconnect-heading">Disconnect Slate folder?</h1></header><p className="slate-plugin-workspace-lede">Slate will forget this folder's path on this computer.</p><p className="slate-plugin-workspace-note">The folder and its Markdown files will not change. You can reconnect it later.</p><div className="slate-plugin-workspace-actions"><button className="slate-plugin-workspace-disconnect" onClick={onConfirm}>Disconnect folder</button><button className="slate-plugin-workspace-cancel" onClick={onCancel}>Cancel</button></div></section>; }
-function SourcePicker({ sources, favoriteIds, onSelect, onManage, onToggleFavorite, workspaceRoot, requestWorkspaceRoot, clearWorkspaceRoot }: { sources: Source[]; favoriteIds: string[]; onSelect: (id: string) => void; onManage: () => void; onToggleFavorite: (id: string) => void; workspaceRoot?: string; requestWorkspaceRoot?: (root?: string) => WorkspaceRootRequestResult | void; clearWorkspaceRoot?: () => void }) {
+function WorkspaceConfirmation({ notice, onDismiss }: { notice: WorkspaceNotice; onDismiss?: () => void }) {
+  return <div className="slate-plugin-workspace-confirmation" data-state={notice.state} data-testid="workspace-confirmation">
+    <div className="slate-plugin-workspace-confirmation-message" role="status">
+      <span aria-hidden="true">{notice.state === "success" ? "✓" : "…"}</span>
+      <strong>{notice.text}</strong>
+    </div>
+    {notice.state === "success" && onDismiss ? <button type="button" aria-label="Dismiss folder confirmation" onClick={onDismiss}>×</button> : null}
+  </div>;
+}
+
+function SourcePicker({ sources, phase, favoriteIds, onSelect, onManage, onToggleFavorite, workspaceRoot, requestWorkspaceRoot, browseWorkspaceRoot, clearWorkspaceRoot, notice, onDismissNotice, onRefreshWorkspace }: { sources: Source[]; phase: WorkspacePhase; favoriteIds: string[]; onSelect: (id: string) => void; onManage: () => void; onToggleFavorite: (id: string) => void; workspaceRoot?: string; requestWorkspaceRoot?: (root?: string) => WorkspaceRootRequestResult | void; browseWorkspaceRoot?: BrowseWorkspaceRoot; clearWorkspaceRoot?: () => void; notice?: WorkspaceNotice; onDismissNotice?: () => void; onRefreshWorkspace?: () => void }) {
   const [changingWorkspace, setChangingWorkspace] = useState(false);
   const [disconnectingWorkspace, setDisconnectingWorkspace] = useState(false);
   const [candidateRoot, setCandidateRoot] = useState(workspaceRoot ?? "");
   const groups = partitionSlateSources(sources, favoriteIds);
   const openWorkspaceChange = () => { setCandidateRoot(workspaceRoot ?? ""); setChangingWorkspace(true); };
   const cancelWorkspaceChange = () => { setCandidateRoot(workspaceRoot ?? ""); setChangingWorkspace(false); };
-  if (changingWorkspace && requestWorkspaceRoot) return <SlateWorkspaceSetup initialRoot={candidateRoot} onRootChange={setCandidateRoot} requestWorkspaceRoot={requestWorkspaceRoot} onCancel={cancelWorkspaceChange} />;
+  if (changingWorkspace && requestWorkspaceRoot) return <SlateWorkspaceSetup initialRoot={candidateRoot} connectedRoot={workspaceRoot} onRootChange={setCandidateRoot} requestWorkspaceRoot={requestWorkspaceRoot} browseWorkspaceRoot={browseWorkspaceRoot} onCancel={cancelWorkspaceChange} onReconnect={() => { setChangingWorkspace(false); onRefreshWorkspace?.(); }} />;
   if (disconnectingWorkspace && clearWorkspaceRoot) return <SlateWorkspaceDisconnect onConfirm={() => { clearSlateFavoriteSourceIds(slateLocalStorage(), workspaceRoot ?? ""); clearWorkspaceRoot?.(); }} onCancel={() => setDisconnectingWorkspace(false)} />;
-  return <><header className="slate-plugin-header slate-plugin-source-header"><div><p>Slate · local reference desk</p><h1>Slate</h1></div><div className="slate-plugin-workspace-tools"><button className="slate-plugin-change-workspace" onClick={onManage}>Manage documents</button>{requestWorkspaceRoot ? <button className="slate-plugin-change-workspace" onClick={openWorkspaceChange}>Change Slate folder</button> : null}{clearWorkspaceRoot ? <button className="slate-plugin-disconnect-workspace" onClick={() => setDisconnectingWorkspace(true)}>Disconnect</button> : null}</div></header>{groups.favorites.length ? <SourceGroup label="Favorites" sources={groups.favorites} favoriteIds={favoriteIds} onSelect={onSelect} onToggleFavorite={onToggleFavorite} /> : null}{groups.documents.length ? <SourceGroup label={groups.favorites.length ? "All documents" : undefined} sources={groups.documents} favoriteIds={favoriteIds} onSelect={onSelect} onToggleFavorite={onToggleFavorite} /> : <section className="slate-plugin-empty-documents"><h2>No documents configured</h2><p>Add a declared Markdown file to begin.</p><button onClick={onManage}>Manage documents</button></section>}</>;
+  return <><header className="slate-plugin-header slate-plugin-source-header"><div><p>Slate · local reference desk</p><h1>Slate</h1></div><div className="slate-plugin-workspace-tools"><button className="slate-plugin-change-workspace" onClick={onManage}>Manage documents</button>{requestWorkspaceRoot ? <button className="slate-plugin-change-workspace" onClick={openWorkspaceChange}>Change Slate folder</button> : null}{clearWorkspaceRoot ? <button className="slate-plugin-disconnect-workspace" onClick={() => setDisconnectingWorkspace(true)}>Disconnect</button> : null}</div></header>
+    {notice ? <WorkspaceConfirmation notice={notice} onDismiss={onDismissNotice} /> : null}
+    {phase === "loading" ? (notice ? null : <p className="slate-plugin-workspace-loading" role="status">Loading configured documents…</p>) : null}
+    {phase === "loaded" && groups.favorites.length ? <SourceGroup label="Favorites" sources={groups.favorites} favoriteIds={favoriteIds} onSelect={onSelect} onToggleFavorite={onToggleFavorite} /> : null}
+    {phase === "loaded" && groups.documents.length ? <SourceGroup label={groups.favorites.length ? "All documents" : undefined} sources={groups.documents} favoriteIds={favoriteIds} onSelect={onSelect} onToggleFavorite={onToggleFavorite} /> : null}
+    {phase === "loaded" && !sources.length ? <section className="slate-plugin-empty-documents"><h2>No documents configured</h2><p>Add a declared Markdown file to begin.</p><button onClick={onManage}>Manage documents</button></section> : null}
+  </>;
 }
 function ManageDocuments({ workspaceRoot, onDone }: { workspaceRoot: string; onDone: () => void }) {
   const [sources, setSources] = useState<SlateSourceDefinition[]>();
@@ -190,6 +301,7 @@ function DocumentManagerEditor({ initialSources, onSave, onCancel }: { initialSo
     setMessage(undefined);
   };
   const save = async () => {
+    if (!dirty || saving) return;
     setShowValidation(true);
     if (errors.some((item) => Object.keys(item).length)) {
       setMessage("Fix the highlighted fields before saving.");
@@ -208,12 +320,12 @@ function DocumentManagerEditor({ initialSources, onSave, onCancel }: { initialSo
   };
   const cancel = () => { if (dirty) setDiscarding(true); else onCancel(); };
 
-  return <section className="slate-plugin-manager" aria-labelledby="slate-manager-heading">
+  return <form className="slate-plugin-manager" aria-labelledby="slate-manager-heading" aria-busy={saving} onSubmit={(event) => { event.preventDefault(); void save(); }}>
     <ManagerHeader />
-    <button className="slate-plugin-back slate-plugin-secondary-back" aria-label="Back to Slate" onClick={cancel}>← Back to Slate</button>
+    <button type="button" className="slate-plugin-back slate-plugin-secondary-back" aria-label="Back to Slate" onClick={cancel}>← Back to Slate</button>
     <div className="slate-plugin-manager-intro">
       <div><p>Choose a document to edit.</p><span>Slate updates only this private configuration. Markdown files are never edited.</span><span className="slate-plugin-manager-order-note">Arrows change configuration order; Slate home stays alphabetical.</span></div>
-      <button className="slate-plugin-manager-add" onClick={add}>＋ Add document</button>
+      <button type="button" className="slate-plugin-manager-add" onClick={add}>＋ Add document</button>
     </div>
     <div className="slate-plugin-manager-layout">
       <nav className="slate-plugin-manager-index" aria-label="Configured documents">
@@ -221,13 +333,13 @@ function DocumentManagerEditor({ initialSources, onSave, onCancel }: { initialSo
           const view = describeSlateView(item.view);
           const label = item.label.trim() || "Untitled document";
           return <div className="slate-plugin-manager-index-row" data-selected={selected === index} key={`${item.id}-${index}`}>
-            <button className="slate-plugin-manager-index-open" aria-label={`Edit ${label}`} aria-current={selected === index ? "true" : undefined} onClick={() => { setSelected(index); setRemoving(false); }}>
+            <button type="button" className="slate-plugin-manager-index-open" aria-label={`Edit ${label}`} aria-current={selected === index ? "true" : undefined} onClick={() => { setSelected(index); setRemoving(false); }}>
               <span className="slate-plugin-manager-index-glyph" aria-hidden="true">{view.glyph}</span>
               <span><strong>{label}</strong><small>{view.description}</small></span>
             </button>
             <span className="slate-plugin-manager-reorder">
-              <button aria-label={`Move ${label} up`} disabled={index === 0} onClick={() => move(index, -1)}>↑</button>
-              <button aria-label={`Move ${label} down`} disabled={index === sources.length - 1} onClick={() => move(index, 1)}>↓</button>
+              <button type="button" aria-label={`Move ${label} up`} disabled={index === 0} onClick={() => move(index, -1)}>↑</button>
+              <button type="button" aria-label={`Move ${label} down`} disabled={index === sources.length - 1} onClick={() => move(index, 1)}>↓</button>
             </span>
           </div>;
         }) : <div className="slate-plugin-manager-index-empty"><strong>No documents yet</strong><span>Add one to begin.</span></div>}
@@ -236,12 +348,12 @@ function DocumentManagerEditor({ initialSources, onSave, onCancel }: { initialSo
         {source ? <>
           <div className="slate-plugin-manager-editor-header">
             <div><span>Document {selected + 1} of {sources.length}</span><h2>{source.label.trim() || "Untitled document"}</h2></div>
-            <button className="slate-plugin-manager-remove" aria-label={`Remove ${source.label.trim() || "document"}`} onClick={() => setRemoving(true)}>Remove</button>
+            <button type="button" className="slate-plugin-manager-remove" aria-label={`Remove ${source.label.trim() || "document"}`} onClick={() => setRemoving(true)}>Remove</button>
           </div>
           {removing ? <div className="slate-plugin-manager-confirm" role="alertdialog" aria-modal="true" aria-labelledby="slate-remove-heading" aria-describedby="slate-remove-description" onKeyDown={(event) => confirmationKeyDown(event, () => setRemoving(false))}>
             <strong id="slate-remove-heading">Remove {source.label.trim() || "this document"}?</strong>
             <p id="slate-remove-description">It will disappear from Slate. The Markdown file will not be deleted.</p>
-            <div><button className="slate-plugin-remove" onClick={remove}>Remove from Slate</button><button ref={keepDocumentRef} onClick={() => setRemoving(false)}>Keep document</button></div>
+            <div><button type="button" className="slate-plugin-remove" onClick={remove}>Remove from Slate</button><button type="button" ref={keepDocumentRef} onClick={() => setRemoving(false)}>Keep document</button></div>
           </div> : null}
           <div className="slate-plugin-manager-fields">
             <ManagerField label="Label" error={showValidation ? sourceErrors.label : undefined}><input aria-label="Label" aria-invalid={Boolean(showValidation && sourceErrors.label)} value={source.label} onChange={(event) => update({ label: event.target.value })} /></ManagerField>
@@ -252,19 +364,19 @@ function DocumentManagerEditor({ initialSources, onSave, onCancel }: { initialSo
             <summary>Advanced</summary>
             <ManagerField label="Document ID" error={showValidation ? sourceErrors.id : undefined} hint="Stable lowercase identifier used by Slate."><input aria-label="Document ID" aria-invalid={Boolean(showValidation && sourceErrors.id)} value={source.id} onChange={(event) => update({ id: event.target.value })} /></ManagerField>
           </details>
-        </> : <div className="slate-plugin-manager-editor-empty"><strong>No document selected</strong><p>Add a document to create its Slate configuration.</p><button onClick={add}>Add document</button></div>}
+        </> : <div className="slate-plugin-manager-editor-empty"><strong>No document selected</strong><p>Add a document to create its Slate configuration.</p><button type="button" onClick={add}>Add document</button></div>}
       </section>
     </div>
     {message ? <p className="slate-plugin-manager-message" role="alert">{message}</p> : null}
     {discarding ? <div className="slate-plugin-manager-confirm slate-plugin-manager-discard" role="alertdialog" aria-modal="true" aria-labelledby="slate-discard-heading" aria-describedby="slate-discard-description" onKeyDown={(event) => confirmationKeyDown(event, () => setDiscarding(false))}>
       <strong id="slate-discard-heading">Discard changes?</strong><p id="slate-discard-description">Your Slate configuration has not been changed.</p>
-      <div><button className="slate-plugin-remove" onClick={onCancel}>Discard changes</button><button ref={keepEditingRef} onClick={() => setDiscarding(false)}>Keep editing</button></div>
+      <div><button type="button" className="slate-plugin-remove" onClick={onCancel}>Discard changes</button><button type="button" ref={keepEditingRef} onClick={() => setDiscarding(false)}>Keep editing</button></div>
     </div> : null}
     <footer className="slate-plugin-manager-footer">
       <span>{dirty ? "Unsaved changes" : `${sources.length} configured ${sources.length === 1 ? "document" : "documents"}`}</span>
-      <div><button className="slate-plugin-workspace-cancel" disabled={saving} onClick={cancel}>Cancel</button><button className="slate-plugin-workspace-connect" disabled={saving || !dirty} onClick={() => void save()}>{saving ? "Saving…" : "Save documents"}</button></div>
+      <div><button type="button" className="slate-plugin-workspace-cancel" disabled={saving} onClick={cancel}>Cancel</button><button type="submit" className="slate-plugin-workspace-connect" disabled={saving || !dirty}>{saving ? "Saving…" : "Save documents"}</button></div>
     </footer>
-  </section>;
+  </form>;
 }
 
 function ManagerField({ label, hint, error, wide, children }: { label: string; hint?: string; error?: string; wide?: boolean; children: ReactNode }) {
@@ -301,11 +413,24 @@ function SlateStyles() { return <style>{`
   .slate-plugin-workspace-setup{max-width:590px;padding-top:8px}
   .slate-plugin-workspace-lede{color:var(--slate-text);font-size:16px;margin:18px 0 18px;max-width:500px}
   .slate-plugin-workspace-field{display:grid;gap:6px}
-  .slate-plugin-workspace-field span{color:var(--slate-text);font-size:13px;font-weight:700}
+  .slate-plugin-workspace-field>label{color:var(--slate-text);font-size:13px;font-weight:700}
+  .slate-plugin-workspace-path-row{display:grid;gap:8px;grid-template-columns:minmax(0,1fr) auto}
+  .slate-plugin-workspace-path-row input{box-sizing:border-box;min-width:0;width:100%}
+  .slate-plugin-workspace-browse{background:var(--slate-surface)!important;border-color:var(--slate-border)!important;color:var(--slate-text)!important;font-weight:700;min-width:92px}
+  .slate-plugin-workspace-browse:hover:not(:disabled){border-color:var(--slate-accent-warm)!important;color:var(--slate-accent-warm)!important}
   .slate-plugin input,.slate-plugin select{background:var(--slate-surface);border:1px solid var(--slate-border);border-radius:7px;color:var(--slate-text);font:inherit;padding:10px 11px}
   .slate-plugin-workspace-note{color:var(--slate-text-muted);font-size:12px;line-height:1.55;margin:8px 0 0;max-width:510px}
   .slate-plugin-workspace-note code{color:var(--slate-text)}
+  .slate-plugin-workspace-status{color:var(--slate-text-muted);font-size:12px;margin:12px 0 0}
   .slate-plugin-workspace-actions{display:flex;gap:8px;margin-top:16px}
+  .slate-plugin-workspace-confirmation{align-items:center;background:var(--slate-surface);border-left:3px solid var(--slate-border);color:var(--slate-text);display:grid;gap:9px;grid-template-columns:1fr auto;margin:14px 0 18px;padding:9px 11px}
+  .slate-plugin-workspace-confirmation[data-state="success"]{background:color-mix(in srgb,var(--slate-success) 9%,var(--slate-canvas));border-left-color:var(--slate-success)}
+  .slate-plugin-workspace-confirmation-message{align-items:center;display:grid;gap:9px;grid-template-columns:auto 1fr}
+  .slate-plugin-workspace-confirmation-message>span{color:var(--slate-text-muted);font-weight:800}
+  .slate-plugin-workspace-confirmation[data-state="success"] .slate-plugin-workspace-confirmation-message>span{color:var(--slate-success)}
+  .slate-plugin-workspace-confirmation-message>strong{font-size:12px}
+  .slate-plugin-workspace-confirmation>button{background:transparent!important;border:0!important;color:var(--slate-text-muted)!important;font-size:18px!important;line-height:1!important;padding:0 3px!important}
+  .slate-plugin-workspace-loading{color:var(--slate-text-muted);font-size:12px;margin:18px 0}
   .slate-plugin-manager{max-width:960px}
   .slate-plugin-manager-intro{align-items:center;display:flex;gap:24px;justify-content:space-between;margin:20px 0 18px}
   .slate-plugin-manager-intro p{color:var(--slate-text);font-size:16px;font-weight:750;margin:0 0 2px}
@@ -417,5 +542,5 @@ function SlateStyles() { return <style>{`
   .slate-plugin-error{color:var(--slate-danger)}
   .slate-plugin-demo{color:var(--slate-text-muted);font-size:12px;margin:14px 0 0}
   @media (max-width:760px){.slate-plugin-sources{grid-template-columns:repeat(2,minmax(0,1fr))}.slate-plugin-manager-layout{grid-template-columns:1fr}.slate-plugin-manager-index{border-bottom:1px solid var(--slate-border);border-right:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));padding:10px 0}.slate-plugin-manager-editor{padding:22px 0}.slate-plugin-manager-index-empty{grid-column:1/-1}}
-  @media (max-width:520px){.slate-plugin-sources{grid-template-columns:1fr}.slate-plugin-source-header{align-items:start;flex-direction:column}.slate-plugin-workspace-tools{margin-top:4px}.slate-plugin-change-workspace{margin-top:0}.slate-plugin-manager-intro{align-items:start;flex-direction:column}.slate-plugin-manager-index{grid-template-columns:1fr}.slate-plugin-manager-fields{grid-template-columns:1fr}.slate-plugin-manager-footer{align-items:stretch;flex-direction:column}.slate-plugin-manager-footer>div{justify-content:flex-end}}
+  @media (max-width:520px){.slate-plugin-sources{grid-template-columns:1fr}.slate-plugin-source-header{align-items:start;flex-direction:column}.slate-plugin-workspace-tools{margin-top:4px}.slate-plugin-change-workspace{margin-top:0}.slate-plugin-workspace-path-row{grid-template-columns:1fr}.slate-plugin-workspace-browse{justify-self:start}.slate-plugin-manager-intro{align-items:start;flex-direction:column}.slate-plugin-manager-index{grid-template-columns:1fr}.slate-plugin-manager-fields{grid-template-columns:1fr}.slate-plugin-manager-footer{align-items:stretch;flex-direction:column}.slate-plugin-manager-footer>div{justify-content:flex-end}}
 `}</style>; }

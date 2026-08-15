@@ -19,12 +19,21 @@ describe("Slate Workshop plugin surface", () => {
   });
 
   it("renders a private Slate-folder setup view without reading a source", () => {
-    const markup = renderToStaticMarkup(<WorkshopToolView requestWorkspaceRoot={() => undefined} />);
+    const markup = renderToStaticMarkup(<WorkshopToolView requestWorkspaceRoot={() => undefined} browseWorkspaceRoot={() => ({ ok: true, root: "/preview/slate" })} />);
     expect(markup).toContain("Connect a Slate folder");
     expect(markup).toContain("Folder containing slate.config.json");
+    expect(markup).toContain("Browse…");
     expect(markup).toContain("Connect folder");
     expect(markup).toContain("The folder must already contain");
-    expect(markup).toContain('<button class="slate-plugin-workspace-connect">Connect folder</button>');
+    expect(markup).toContain('<form>');
+    expect(markup).toContain('<button type="submit" class="slate-plugin-workspace-connect">Connect folder</button>');
+  });
+
+  it("keeps manual folder entry usable when the host does not provide browsing", () => {
+    const markup = renderToStaticMarkup(<WorkshopToolView requestWorkspaceRoot={() => undefined} />);
+    expect(markup).toContain("Folder containing slate.config.json");
+    expect(markup).not.toContain("Browse…");
+    expect(markup).toContain("Connect folder");
   });
 
   it("ships substantial non-private preview data for layout review", () => {
@@ -58,7 +67,7 @@ describe("Slate Workshop plugin surface", () => {
     expect(pluginSource).toContain("Change Slate folder");
     expect(pluginSource).toContain("Use a different folder");
     expect(pluginSource).toContain("Slate does not search this folder");
-    expect(pluginSource).toContain("requestWorkspaceRoot(candidate.trim())");
+    expect(pluginSource).toContain("requestWorkspaceRoot(nextRoot)");
   });
 
   it("makes folder removal explicit and keeps the private folder untouched", () => {
@@ -90,6 +99,7 @@ describe("Slate Workshop plugin surface", () => {
   it("does not bundle a Tauri opener plugin", () => {
     const packageJson = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as { dependencies?: Record<string, string>; devDependencies?: Record<string, string> };
     expect({ ...packageJson.dependencies, ...packageJson.devDependencies }).not.toHaveProperty("@tauri-apps/plugin-opener");
+    expect({ ...packageJson.dependencies, ...packageJson.devDependencies }).not.toHaveProperty("@tauri-apps/plugin-dialog");
   });
 
   it("publishes explicit MIT package metadata with the canonical copyright", () => {

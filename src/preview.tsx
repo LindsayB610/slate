@@ -25,6 +25,6 @@ const representativeHostTheme = inheritedThemePreview ? {
 
 createRoot(document.getElementById("root")!).render(
   <div style={representativeHostTheme}>
-    <WorkshopToolView requestWorkspaceRoot={() => undefined} />
+    <WorkshopToolView requestWorkspaceRoot={() => undefined} browseWorkspaceRoot={() => ({ ok: true, root: "/preview/slate" })} />
   </div>,
 );

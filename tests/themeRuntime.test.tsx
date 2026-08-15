@@ -67,6 +67,16 @@ describe("mounted Slate host theme behavior", () => {
     expect(css).toContain("[aria-pressed=true]{color:var(--slate-favorite)!important}");
   });
 
+  it("keeps a useful Favorites shelf without showing a false empty state when every document is starred", () => {
+    renderPreview();
+    for (const button of screen.getAllByRole("button", { name: /Add .+ to favorites/ })) fireEvent.click(button);
+
+    expect(screen.getByRole("heading", { name: /Favorites/ })).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "No documents configured" })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "All documents" })).toBeNull();
+    expect(screen.getAllByRole("button", { name: /Remove .+ from favorites/ })).toHaveLength(6);
+  });
+
   it("keeps portaled table tooltips inside Slate's themed subtree", async () => {
     renderPreview();
     const inventory = screen.getByText("Inventory").closest("button");

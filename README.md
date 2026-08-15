@@ -16,6 +16,13 @@ optional, narrow configuration-management pair
 `read_configured_markdown_config` / `write_configured_markdown_config`.
 It has peer dependencies on React and `@tauri-apps/api`.
 
+Slate's neutral view props also support an optional `browseWorkspaceRoot()`
+callback. A desktop host can use it to open its own native folder chooser and
+return `{ ok: true, root }`; Slate then places that absolute path in the setup
+field for review before the user connects it. Cancellation returns `undefined`
+or `{ ok: false, canceled: true }` and changes nothing. Slate does not import a
+dialog plugin or gain filesystem discovery through this callback.
+
 ### Progressive theme inheritance
 
 When Slate is embedded in Workshop, it inherits Workshop's active semantic CSS
@@ -72,8 +79,12 @@ unique local Markdown files.
 ### Connecting a Slate folder
 
 In Slate, select **Connect a Slate folder**, then enter the absolute path to an
-existing private folder containing `slate.config.json`. Once connected, use
-**Change Slate folder** from the source chooser to replace it. Workshop keeps
+existing private folder containing `slate.config.json`. When the host provides
+its folder-picker callback, **Browse…** opens the host's folder chooser and
+places the selection in the same field; review it, then choose **Connect
+folder** or press Enter. Canceling the chooser preserves the current field and
+connection. Once connected, use **Change Slate folder** from the source chooser
+to replace it. Workshop keeps
 the selected folder path as local UI state, so reopening the app or renewing
 OS folder access does not require re-entering it. Use **Disconnect** to forget
 that local selection; the folder, configuration, Markdown files, and source
