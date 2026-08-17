@@ -84,7 +84,8 @@ describe("mounted document manager", () => {
 
     expect(screen.getByText("tasks.md")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Change Markdown file for Tasks" })).toBeTruthy();
-    expect(screen.getByText("Enter path manually").closest("details")?.hasAttribute("open")).toBe(false);
+    expect(screen.queryByText("Enter path manually")).toBeNull();
+    expect(screen.getByText("Advanced").closest("details")?.hasAttribute("open")).toBe(false);
 
     const browseButton = screen.getByRole("button", { name: "Change Markdown file for Tasks" });
     browseButton.focus();
@@ -163,6 +164,8 @@ describe("mounted document manager", () => {
 
     expect(screen.queryByRole("button", { name: "Change Markdown file for Tasks" })).toBeNull();
     expect(screen.getByText("File browsing is unavailable in this host.")).toBeTruthy();
+    expect(screen.getByText("Advanced").closest("details")?.hasAttribute("open")).toBe(true);
+    expect(screen.queryByText("Enter path manually")).toBeNull();
     expect(screen.getByRole("group", { name: "Markdown file" })).toBeTruthy();
     expect((screen.getByLabelText("Absolute Markdown path") as HTMLInputElement).value).toBe("/preview/tasks.md");
   });
@@ -173,6 +176,7 @@ describe("mounted document manager", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save documents" }));
 
     expect(await screen.findByText("Enter an absolute path to a Markdown file.")).toBeTruthy();
+    expect(screen.getByText("Advanced").closest("details")?.hasAttribute("open")).toBe(true);
     expect(screen.getByLabelText("Absolute Markdown path")).toBeTruthy();
   });
 

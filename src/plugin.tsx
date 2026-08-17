@@ -416,16 +416,17 @@ function DocumentManagerEditor({ initialSources, browseMarkdownFile, onSave, onC
                 {browseMarkdownFile ? <button ref={browseButtonRef} type="button" className="slate-plugin-manager-file-browse" aria-label={`${source.path ? "Change" : "Choose"} Markdown file for ${source.label.trim() || "document"}`} disabled={browsing || saving} onClick={() => { void browse(); }}>{browsing ? "Choosing…" : source.path ? "Change file…" : "Choose file…"}</button> : null}
               </div>
               {browseMessage ? <p className={browseMessage.tone === "error" ? "slate-plugin-manager-file-error" : "slate-plugin-manager-file-status"} role={browseMessage.tone === "error" ? "alert" : "status"}>{browseMessage.text}</p> : null}
-              <details className="slate-plugin-manager-manual-path" open={!browseMarkdownFile || (showValidation && Boolean(sourceErrors.path)) ? true : undefined}>
-                <summary>Enter path manually</summary>
-                {!browseMarkdownFile ? <p>File browsing is unavailable in this host.</p> : null}
-                <ManagerField label="Absolute Markdown path" error={showValidation ? sourceErrors.path : undefined} hint="Slate reads only this declared file; it never searches the folder."><input aria-label="Absolute Markdown path" aria-invalid={Boolean(showValidation && sourceErrors.path)} disabled={saving || browsing} value={source.path} onChange={(event) => update({ path: event.target.value })} placeholder="/absolute/path/to/document.md" /></ManagerField>
-              </details>
             </div>
           </div>
-          <details className="slate-plugin-manager-advanced" open={showValidation && Boolean(sourceErrors.id) ? true : undefined}>
+          <details className="slate-plugin-manager-advanced" open={!browseMarkdownFile || (showValidation && Boolean(sourceErrors.id || sourceErrors.path)) ? true : undefined}>
             <summary>Advanced</summary>
-            <ManagerField label="Document ID" error={showValidation ? sourceErrors.id : undefined} hint="Stable lowercase identifier used by Slate."><input aria-label="Document ID" aria-invalid={Boolean(showValidation && sourceErrors.id)} disabled={saving || browsing} value={source.id} onChange={(event) => update({ id: event.target.value })} /></ManagerField>
+            <div className="slate-plugin-manager-advanced-body">
+              <ManagerField label="Document ID" error={showValidation ? sourceErrors.id : undefined} hint="Stable lowercase identifier used by Slate."><input aria-label="Document ID" aria-invalid={Boolean(showValidation && sourceErrors.id)} disabled={saving || browsing} value={source.id} onChange={(event) => update({ id: event.target.value })} /></ManagerField>
+              <div className="slate-plugin-manager-manual-path">
+                {!browseMarkdownFile ? <p>File browsing is unavailable in this host.</p> : null}
+                <ManagerField label="Absolute Markdown path" error={showValidation ? sourceErrors.path : undefined} hint="Slate reads only this declared file; it never searches the folder."><input aria-label="Absolute Markdown path" aria-invalid={Boolean(showValidation && sourceErrors.path)} disabled={saving || browsing} value={source.path} onChange={(event) => update({ path: event.target.value })} placeholder="/absolute/path/to/document.md" /></ManagerField>
+              </div>
+            </div>
           </details>
         </> : <div className="slate-plugin-manager-editor-empty"><strong>No document selected</strong><p>Add a document to create its Slate configuration.</p><button type="button" onClick={add}>Add document</button></div>}
       </section>
@@ -536,11 +537,11 @@ function SlateStyles() { return <style>{`
   .slate-plugin-manager-file-status,.slate-plugin-manager-file-error{font-size:11px;margin:1px 0 0}
   .slate-plugin-manager-file-status{color:var(--slate-text-muted)}
   .slate-plugin-manager-file-error{color:var(--slate-danger)}
-  .slate-plugin-manager-manual-path{border-top:1px solid var(--slate-border);margin-top:7px;padding-top:10px}
-  .slate-plugin-manager-manual-path summary{color:var(--slate-text-muted);cursor:pointer;font-size:11px;margin-bottom:10px;width:max-content}
+  .slate-plugin-manager-manual-path{border-top:1px solid var(--slate-border);padding-top:14px}
   .slate-plugin-manager-manual-path>p{color:var(--slate-warning);font-size:11px;margin:0 0 8px}
   .slate-plugin-manager-advanced{border-top:1px solid var(--slate-border);margin-top:22px;padding-top:13px}
   .slate-plugin-manager-advanced summary{color:var(--slate-text-muted);cursor:pointer;font-size:12px;margin-bottom:14px}
+  .slate-plugin-manager-advanced-body{display:grid;gap:16px}
   .slate-plugin-manager-confirm{background:color-mix(in srgb,var(--slate-danger) 8%,var(--slate-canvas));border-left:3px solid var(--slate-danger);margin:0 0 20px;padding:12px 14px}
   .slate-plugin-manager-confirm strong{color:var(--slate-text)}
   .slate-plugin-manager-confirm p{color:var(--slate-text-muted);font-size:12px;margin:3px 0 10px}
