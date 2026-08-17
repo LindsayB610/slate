@@ -4,7 +4,7 @@ import * as ScrollAreaPrimitive from "@radix-ui/react-scroll-area";
 import * as TabsPrimitive from "@radix-ui/react-tabs";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode, type RefObject } from "react";
-import { parseMarkdownSections, parseMarkdownTable, parseScopedMarkdownTable, parseSlateConfig, splitTabbedDocument, type SlateConfig, type SlateSourceDefinition } from "./index.js";
+import { isSlateMarkdownPath, parseMarkdownSections, parseMarkdownTable, parseScopedMarkdownTable, parseSlateConfig, splitTabbedDocument, type SlateConfig, type SlateSourceDefinition } from "./index.js";
 import { clearSlateFavoriteSourceIds, describeSlateView, isSlateTauriRuntime, keepLatestSnapshot, loadSlateFavoriteSourceIds, openSlateExternalUrl, parseInlineMarkdown, partitionSlateSources, releaseIfDisposed, retainSelectedSource, saveSlateFavoriteSourceIds, shouldRefreshSource, slateDemoSnapshots, slateDemoSources, slateHeadingTag, slateLinkTarget, sortTableRows, toggleSlateFavoriteSourceId, validateSourceMetadata, type SlateSnapshot, type SlateSourceChange, type TableSortDirection } from "./pluginModel.js";
 import { slateHostThemeVariables as hostTheme, slateOwnedSemanticColors } from "./themeContract.js";
 
@@ -17,11 +17,13 @@ function createSlateDemoConfigSources(): SlateSourceDefinition[] {
 export type WorkspaceRootRequestResult = { ok: true } | { ok: false; message: string };
 export type WorkspaceRootBrowseResult = { ok: true; root: string } | { ok: false; canceled?: boolean; message?: string };
 export type BrowseWorkspaceRoot = () => WorkspaceRootBrowseResult | void | Promise<WorkspaceRootBrowseResult | void>;
-export type WorkshopToolViewProps = { activeRouteId?: string; workspaceRoot?: string; requestWorkspaceRoot: (root?: string) => WorkspaceRootRequestResult | void; browseWorkspaceRoot?: BrowseWorkspaceRoot; clearWorkspaceRoot?: () => void };
+export type MarkdownFileBrowseResult = { ok: true; path: string } | { ok: false; canceled?: boolean; message?: string };
+export type BrowseMarkdownFile = (currentPath?: string) => MarkdownFileBrowseResult | void | Promise<MarkdownFileBrowseResult | void>;
+export type WorkshopToolViewProps = { activeRouteId?: string; workspaceRoot?: string; requestWorkspaceRoot: (root?: string) => WorkspaceRootRequestResult | void; browseWorkspaceRoot?: BrowseWorkspaceRoot; browseMarkdownFile?: BrowseMarkdownFile; clearWorkspaceRoot?: () => void };
 type WorkspaceNotice = { state: "loading" | "success"; text: string };
 type WorkspacePhase = "loading" | "loaded" | "error";
 
-export function WorkshopToolView({ workspaceRoot, requestWorkspaceRoot, browseWorkspaceRoot, clearWorkspaceRoot }: WorkshopToolViewProps) {
+export function WorkshopToolView({ workspaceRoot, requestWorkspaceRoot, browseWorkspaceRoot, browseMarkdownFile, clearWorkspaceRoot }: WorkshopToolViewProps) {
   const [root, setRoot] = useState(""); const [sources, setSources] = useState<Source[]>([]); const [selected, setSelected] = useState<string>();
   const [data, setData] = useState<Record<string, SlateSnapshot>>({}); const [error, setError] = useState<string>(); const [workspaceNotice, setWorkspaceNotice] = useState<WorkspaceNotice>(); const [managing, setManaging] = useState(false); const [reload, setReload] = useState(0); const [favoriteIds, setFavoriteIds] = useState<string[]>(() => loadSlateFavoriteSourceIds(slateLocalStorage(), workspaceRoot ?? "")); const [loadedWorkspaceRoot, setLoadedWorkspaceRoot] = useState<string>(); const [failedWorkspaceRoot, setFailedWorkspaceRoot] = useState<string>(); const versions = useRef<Record<string, number>>({}); const previousWorkspaceRoot = useRef(workspaceRoot); const pendingWorkspaceConfirmation = useRef(false);
   useEffect(() => { setFavoriteIds(loadSlateFavoriteSourceIds(slateLocalStorage(), workspaceRoot ?? "")); }, [workspaceRoot]);
@@ -41,15 +43,15 @@ export function WorkshopToolView({ workspaceRoot, requestWorkspaceRoot, browseWo
   }, [workspaceRoot]);
   const read = useCallback(async (id: string, active: () => boolean = () => true) => { if (!workspaceRoot) return; const version = (versions.current[id] ?? 0) + 1; versions.current[id] = version; try { const result = await invoke<SlateSnapshot>("read_configured_markdown_source", { workspaceRoot, configFile, source: id }); if (!active()) return; setData((old) => keepLatestSnapshot(old, id, version, versions.current[id], result)); if (versions.current[id] === version) setError(undefined); } catch { if (active() && versions.current[id] === version) setError("Slate couldn't refresh this document. It will keep the last good view when one is available."); } }, [workspaceRoot]);
   useEffect(() => { if (!workspaceRoot) return; let disposed = false; let stop: (() => void) | undefined; const active = () => !disposed; setError(undefined); setFailedWorkspaceRoot(undefined); void (async () => { try { const raw = await invoke<unknown>("read_configured_markdown_sources", { workspaceRoot, configFile }); if (!active()) return; const listed = validateSourceMetadata(raw); if (!listed) throw new Error("Slate configuration contains unsupported source metadata."); setSources(listed); setSelected((old) => retainSelectedSource(old, listed)); setLoadedWorkspaceRoot(workspaceRoot); await Promise.all(listed.map((source) => read(source.id, active))); if (!active()) return; const lateStop = await listen<SlateSourceChange>("local-markdown://source-changed", (event) => { if (shouldRefreshSource(workspaceRoot, event.payload, configFile)) void read(event.payload.source, active); }); if (releaseIfDisposed(disposed, lateStop)) return; stop = lateStop; await invoke("start_configured_markdown_watch", { workspaceRoot, configFile }); if (active() && pendingWorkspaceConfirmation.current) { pendingWorkspaceConfirmation.current = false; setWorkspaceNotice({ state: "success", text: "Slate folder connected." }); } } catch { if (active()) { setSources([]); setSelected(undefined); setData({}); setLoadedWorkspaceRoot(undefined); setFailedWorkspaceRoot(workspaceRoot); pendingWorkspaceConfirmation.current = false; setWorkspaceNotice(undefined); setError("Slate couldn't open this folder. Check that it still exists, Workshop has access to it, and it contains a valid slate.config.json. Then use Change Slate folder to try again."); } } })(); return () => { disposed = true; stop?.(); }; }, [workspaceRoot, read, reload]);
-  if (!workspaceRoot && isBrowserPreview() && !isSetupPreview()) return <DemoSlate />;
+  if (!workspaceRoot && isBrowserPreview() && !isSetupPreview()) return <DemoSlate browseMarkdownFile={browseMarkdownFile} />;
   if (!workspaceRoot) return <SlateRoot><SlateWorkspaceSetup initialRoot={root} onRootChange={setRoot} requestWorkspaceRoot={requestWorkspaceRoot} browseWorkspaceRoot={browseWorkspaceRoot} /></SlateRoot>;
   const workspacePhase: WorkspacePhase = failedWorkspaceRoot === workspaceRoot ? "error" : loadedWorkspaceRoot === workspaceRoot ? "loaded" : "loading";
   const visibleSources = workspacePhase === "loaded" ? sources : [];
   const visibleData = workspacePhase === "loaded" ? data : {};
-  const source = visibleSources.find((item) => item.id === selected); return <SlateRoot>{managing && workspacePhase === "loaded" ? <ManageDocuments workspaceRoot={workspaceRoot} onDone={() => { setManaging(false); setSources([]); setSelected(undefined); setLoadedWorkspaceRoot(undefined); setFailedWorkspaceRoot(undefined); setReload((value) => value + 1); }} /> : source ? <SourceDocument source={source} snapshot={visibleData[source.id]} onBack={() => setSelected(undefined)} /> : <SourcePicker sources={visibleSources} phase={workspacePhase} favoriteIds={favoriteIds} onSelect={setSelected} onManage={() => setManaging(true)} onToggleFavorite={(id) => setFavoriteIds((current) => { const next = toggleSlateFavoriteSourceId(current, id); saveSlateFavoriteSourceIds(slateLocalStorage(), workspaceRoot, next); return next; })} workspaceRoot={workspaceRoot} requestWorkspaceRoot={requestWorkspaceRoot} browseWorkspaceRoot={browseWorkspaceRoot} clearWorkspaceRoot={clearWorkspaceRoot} notice={workspaceNotice} onDismissNotice={() => setWorkspaceNotice(undefined)} onRefreshWorkspace={() => { setSources([]); setSelected(undefined); setData({}); setLoadedWorkspaceRoot(undefined); setFailedWorkspaceRoot(undefined); versions.current = {}; pendingWorkspaceConfirmation.current = true; setWorkspaceNotice({ state: "loading", text: "Refreshing Slate folder access…" }); setReload((value) => value + 1); }} />}{error && <p className="slate-plugin-error" role="alert">{error}</p>}</SlateRoot>;
+  const source = visibleSources.find((item) => item.id === selected); return <SlateRoot>{managing && workspacePhase === "loaded" ? <ManageDocuments workspaceRoot={workspaceRoot} browseMarkdownFile={browseMarkdownFile} onDone={() => { setManaging(false); setSources([]); setSelected(undefined); setLoadedWorkspaceRoot(undefined); setFailedWorkspaceRoot(undefined); setReload((value) => value + 1); }} /> : source ? <SourceDocument source={source} snapshot={visibleData[source.id]} onBack={() => setSelected(undefined)} /> : <SourcePicker sources={visibleSources} phase={workspacePhase} favoriteIds={favoriteIds} onSelect={setSelected} onManage={() => setManaging(true)} onToggleFavorite={(id) => setFavoriteIds((current) => { const next = toggleSlateFavoriteSourceId(current, id); saveSlateFavoriteSourceIds(slateLocalStorage(), workspaceRoot, next); return next; })} workspaceRoot={workspaceRoot} requestWorkspaceRoot={requestWorkspaceRoot} browseWorkspaceRoot={browseWorkspaceRoot} clearWorkspaceRoot={clearWorkspaceRoot} notice={workspaceNotice} onDismissNotice={() => setWorkspaceNotice(undefined)} onRefreshWorkspace={() => { setSources([]); setSelected(undefined); setData({}); setLoadedWorkspaceRoot(undefined); setFailedWorkspaceRoot(undefined); versions.current = {}; pendingWorkspaceConfirmation.current = true; setWorkspaceNotice({ state: "loading", text: "Refreshing Slate folder access…" }); setReload((value) => value + 1); }} />}{error && <p className="slate-plugin-error" role="alert">{error}</p>}</SlateRoot>;
 }
 function SlateRoot({ children }: { children: ReactNode }) { const [portalContainer, setPortalContainer] = useState<HTMLElement | null>(null); return <main className="slate-plugin"><SlateStyles /><SlatePortalContext.Provider value={portalContainer}>{children}<div className="slate-plugin-portal" ref={setPortalContainer} /></SlatePortalContext.Provider></main>; }
-function DemoSlate() {
+function DemoSlate({ browseMarkdownFile }: { browseMarkdownFile?: BrowseMarkdownFile }) {
   const [selected, setSelected] = useState<string>();
   const [managing, setManaging] = useState(false);
   const [demoSources, setDemoSources] = useState<SlateSourceDefinition[]>(createSlateDemoConfigSources);
@@ -57,7 +59,7 @@ function DemoSlate() {
   const metadata = demoSources.map(({ id, label, view }) => ({ id, label, view }));
   const source = metadata.find((item) => item.id === selected);
   return <SlateRoot>{managing
-    ? <DocumentManagerEditor initialSources={demoSources} onCancel={() => setManaging(false)} onSave={async (next) => { setDemoSources(next); setManaging(false); }} />
+    ? <DocumentManagerEditor initialSources={demoSources} browseMarkdownFile={browseMarkdownFile} onCancel={() => setManaging(false)} onSave={async (next) => { setDemoSources(next); setManaging(false); }} />
     : source
       ? <SourceDocument source={source} snapshot={slateDemoSnapshots[source.id]} onBack={() => setSelected(undefined)} />
       : <><SourcePicker sources={metadata} phase="loaded" favoriteIds={favoriteIds} onSelect={setSelected} onManage={() => setManaging(true)} onToggleFavorite={(id) => setFavoriteIds((current) => { const next = toggleSlateFavoriteSourceId(current, id); saveSlateFavoriteSourceIds(slateLocalStorage(), "slate-demo", next); return next; })} /><p className="slate-plugin-demo">Preview data — native Workshop uses only your configured local files.</p></>}
@@ -168,7 +170,7 @@ function SourcePicker({ sources, phase, favoriteIds, onSelect, onManage, onToggl
     {phase === "loaded" && !sources.length ? <section className="slate-plugin-empty-documents"><h2>No documents configured</h2><p>Add a declared Markdown file to begin.</p><button onClick={onManage}>Manage documents</button></section> : null}
   </>;
 }
-function ManageDocuments({ workspaceRoot, onDone }: { workspaceRoot: string; onDone: () => void }) {
+function ManageDocuments({ workspaceRoot, browseMarkdownFile, onDone }: { workspaceRoot: string; browseMarkdownFile?: BrowseMarkdownFile; onDone: () => void }) {
   const [sources, setSources] = useState<SlateSourceDefinition[]>();
   const [loadError, setLoadError] = useState(false);
   const [attempt, setAttempt] = useState(0);
@@ -184,6 +186,7 @@ function ManageDocuments({ workspaceRoot, onDone }: { workspaceRoot: string; onD
   if (!sources) return <ManagerState error={loadError} onBack={onDone} onRetry={() => setAttempt((value) => value + 1)} />;
   return <DocumentManagerEditor
     initialSources={sources}
+    browseMarkdownFile={browseMarkdownFile}
     onCancel={onDone}
     onSave={async (next) => {
       await invoke("write_configured_markdown_config", { workspaceRoot, configFile, config: { version: 1, sources: next } });
@@ -221,10 +224,14 @@ function validateSourceDrafts(sources: SlateSourceDefinition[]): SourceDraftErro
     if (!source.label.trim()) errors.label = "Enter a label.";
     if (!/^[a-z0-9][a-z0-9-]*$/.test(source.id)) errors.id = "Use lowercase letters, numbers, and hyphens.";
     else if ((ids.get(source.id) ?? 0) > 1) errors.id = "Use a unique document ID.";
-    if (!/^\/(?!.*(?:^|\/)\.\.(?:\/|$)).+\.md$/.test(source.path)) errors.path = "Enter an absolute path to a Markdown file.";
+    if (!isSlateMarkdownPath(source.path)) errors.path = "Enter an absolute path to a Markdown file.";
     else if ((paths.get(source.path) ?? 0) > 1) errors.path = "Use a unique Markdown path.";
     return errors;
   });
+}
+
+function markdownFileName(path: string): string {
+  return path.split("/").filter(Boolean).at(-1) ?? "No file selected";
 }
 
 function nextDocumentId(sources: SlateSourceDefinition[]): string {
@@ -255,7 +262,7 @@ function confirmationKeyDown(event: KeyboardEvent<HTMLDivElement>, close: () => 
   else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
 }
 
-function DocumentManagerEditor({ initialSources, onSave, onCancel }: { initialSources: SlateSourceDefinition[]; onSave: (sources: SlateSourceDefinition[]) => Promise<void>; onCancel: () => void }) {
+function DocumentManagerEditor({ initialSources, browseMarkdownFile, onSave, onCancel }: { initialSources: SlateSourceDefinition[]; browseMarkdownFile?: BrowseMarkdownFile; onSave: (sources: SlateSourceDefinition[]) => Promise<void>; onCancel: () => void }) {
   const [sources, setSources] = useState<SlateSourceDefinition[]>(initialSources);
   const [selected, setSelected] = useState(initialSources.length ? 0 : -1);
   const [saving, setSaving] = useState(false);
@@ -263,28 +270,38 @@ function DocumentManagerEditor({ initialSources, onSave, onCancel }: { initialSo
   const [showValidation, setShowValidation] = useState(false);
   const [removing, setRemoving] = useState(false);
   const [discarding, setDiscarding] = useState(false);
+  const [browsing, setBrowsing] = useState(false);
+  const [browseMessage, setBrowseMessage] = useState<{ tone: "status" | "error"; text: string }>();
   const keepDocumentRef = useRef<HTMLButtonElement>(null);
   const keepEditingRef = useRef<HTMLButtonElement>(null);
+  const browseButtonRef = useRef<HTMLButtonElement>(null);
+  const editorRef = useRef<HTMLElement>(null);
+  const editorHeadingRef = useRef<HTMLHeadingElement>(null);
+  const browseRequest = useRef(0);
+  const selectedRef = useRef(selected);
+  selectedRef.current = selected;
   const dirty = JSON.stringify(sources) !== JSON.stringify(initialSources);
   const errors = validateSourceDrafts(sources);
   const source = selected >= 0 ? sources[selected] : undefined;
   const sourceErrors = selected >= 0 ? errors[selected] ?? {} : {};
   useConfirmationFocus(removing, keepDocumentRef);
   useConfirmationFocus(discarding, keepEditingRef);
+  useEffect(() => () => { browseRequest.current += 1; }, []);
+
+  const revealEditor = () => {
+    if (typeof window === "undefined") return;
+    const stacked = typeof window.matchMedia === "function" ? window.matchMedia("(max-width: 760px)").matches : window.innerWidth <= 760;
+    if (!stacked) return;
+    setTimeout(() => {
+      editorRef.current?.scrollIntoView?.({ block: "start" });
+      editorHeadingRef.current?.focus({ preventScroll: true });
+    }, 0);
+  };
 
   const update = (patch: Partial<SlateSourceDefinition>) => {
     setSources((current) => current.map((item, index) => index === selected ? { ...item, ...patch } : item));
     setMessage(undefined);
-  };
-  const move = (index: number, offset: number) => {
-    const target = index + offset;
-    if (!sources[target]) return;
-    setSources((current) => {
-      const next = [...current];
-      [next[index], next[target]] = [next[target], next[index]];
-      return next;
-    });
-    setSelected((current) => current === index ? target : current === target ? index : current);
+    setBrowseMessage(undefined);
   };
   const add = () => {
     const next = { id: nextDocumentId(sources), label: "Untitled document", path: "", view: "markdown" as const };
@@ -292,6 +309,8 @@ function DocumentManagerEditor({ initialSources, onSave, onCancel }: { initialSo
     setSelected(sources.length);
     setShowValidation(false);
     setMessage(undefined);
+    setBrowseMessage(undefined);
+    revealEditor();
   };
   const remove = () => {
     const next = sources.filter((_, index) => index !== selected);
@@ -299,9 +318,44 @@ function DocumentManagerEditor({ initialSources, onSave, onCancel }: { initialSo
     setSelected(next.length ? Math.min(selected, next.length - 1) : -1);
     setRemoving(false);
     setMessage(undefined);
+    setBrowseMessage(undefined);
+  };
+  const browse = async () => {
+    if (!browseMarkdownFile || !source || browsing) return;
+    const request = ++browseRequest.current;
+    const target = selected;
+    setBrowsing(true);
+    setBrowseMessage({ tone: "status", text: "Opening file browser…" });
+    try {
+      const result = await browseMarkdownFile(source.path || undefined);
+      if (request !== browseRequest.current || selectedRef.current !== target) return;
+      if (!result || (!result.ok && result.canceled)) { setBrowseMessage(undefined); return; }
+      if (!result.ok) {
+        setBrowseMessage({ tone: "error", text: result.message ?? "Workshop couldn’t open the file browser. Enter the path manually or try again." });
+        return;
+      }
+      const path = result.path.trim();
+      if (!isSlateMarkdownPath(path)) {
+        setBrowseMessage({ tone: "error", text: "Choose an absolute path to a Markdown file." });
+        return;
+      }
+      if (path === source.path) {
+        setBrowseMessage({ tone: "status", text: `${markdownFileName(path)} is already selected.` });
+        return;
+      }
+      update({ path });
+      setBrowseMessage({ tone: "status", text: `${markdownFileName(path)} selected. Save documents to apply this change.` });
+    } catch {
+      if (request === browseRequest.current && selectedRef.current === target) setBrowseMessage({ tone: "error", text: "Workshop couldn’t open the file browser. Enter the path manually or try again." });
+    } finally {
+      if (request === browseRequest.current && selectedRef.current === target) {
+        setBrowsing(false);
+        setTimeout(() => browseButtonRef.current?.focus(), 0);
+      }
+    }
   };
   const save = async () => {
-    if (!dirty || saving) return;
+    if (!dirty || saving || browsing) return;
     setShowValidation(true);
     if (errors.some((item) => Object.keys(item).length)) {
       setMessage("Fix the highlighted fields before saving.");
@@ -320,12 +374,12 @@ function DocumentManagerEditor({ initialSources, onSave, onCancel }: { initialSo
   };
   const cancel = () => { if (dirty) setDiscarding(true); else onCancel(); };
 
-  return <form className="slate-plugin-manager" aria-labelledby="slate-manager-heading" aria-busy={saving} onSubmit={(event) => { event.preventDefault(); void save(); }}>
+  return <form className="slate-plugin-manager" aria-labelledby="slate-manager-heading" aria-busy={saving || browsing} onSubmit={(event) => { event.preventDefault(); void save(); }}>
     <ManagerHeader />
     <button type="button" className="slate-plugin-back slate-plugin-secondary-back" aria-label="Back to Slate" onClick={cancel}>← Back to Slate</button>
     <div className="slate-plugin-manager-intro">
-      <div><p>Choose a document to edit.</p><span>Slate updates only this private configuration. Markdown files are never edited.</span><span className="slate-plugin-manager-order-note">Arrows change configuration order; Slate home stays alphabetical.</span></div>
-      <button type="button" className="slate-plugin-manager-add" onClick={add}>＋ Add document</button>
+      <div><p>Choose a document to edit.</p><span>Slate updates only this private configuration. Markdown files are never edited.</span></div>
+      <button type="button" className="slate-plugin-manager-add" disabled={saving || browsing} onClick={add}>＋ Add document</button>
     </div>
     <div className="slate-plugin-manager-layout">
       <nav className="slate-plugin-manager-index" aria-label="Configured documents">
@@ -333,22 +387,18 @@ function DocumentManagerEditor({ initialSources, onSave, onCancel }: { initialSo
           const view = describeSlateView(item.view);
           const label = item.label.trim() || "Untitled document";
           return <div className="slate-plugin-manager-index-row" data-selected={selected === index} key={`${item.id}-${index}`}>
-            <button type="button" className="slate-plugin-manager-index-open" aria-label={`Edit ${label}`} aria-current={selected === index ? "true" : undefined} onClick={() => { setSelected(index); setRemoving(false); }}>
+            <button type="button" className="slate-plugin-manager-index-open" aria-label={`Edit ${label}`} aria-current={selected === index ? "true" : undefined} disabled={saving || browsing} onClick={() => { browseRequest.current += 1; setBrowsing(false); setBrowseMessage(undefined); setSelected(index); setRemoving(false); revealEditor(); }}>
               <span className="slate-plugin-manager-index-glyph" aria-hidden="true">{view.glyph}</span>
               <span><strong>{label}</strong><small>{view.description}</small></span>
             </button>
-            <span className="slate-plugin-manager-reorder">
-              <button type="button" aria-label={`Move ${label} up`} disabled={index === 0} onClick={() => move(index, -1)}>↑</button>
-              <button type="button" aria-label={`Move ${label} down`} disabled={index === sources.length - 1} onClick={() => move(index, 1)}>↓</button>
-            </span>
           </div>;
         }) : <div className="slate-plugin-manager-index-empty"><strong>No documents yet</strong><span>Add one to begin.</span></div>}
       </nav>
-      <section className="slate-plugin-manager-editor" aria-label={source ? `Edit ${source.label || "document"}` : "Document editor"}>
+      <section ref={editorRef} className="slate-plugin-manager-editor" aria-label={source ? `Edit ${source.label || "document"}` : "Document editor"}>
         {source ? <>
           <div className="slate-plugin-manager-editor-header">
-            <div><span>Document {selected + 1} of {sources.length}</span><h2>{source.label.trim() || "Untitled document"}</h2></div>
-            <button type="button" className="slate-plugin-manager-remove" aria-label={`Remove ${source.label.trim() || "document"}`} onClick={() => setRemoving(true)}>Remove</button>
+            <div><span>Document {selected + 1} of {sources.length}</span><h2 ref={editorHeadingRef} tabIndex={-1}>{source.label.trim() || "Untitled document"}</h2></div>
+            <button type="button" className="slate-plugin-manager-remove" aria-label={`Remove ${source.label.trim() || "document"}`} disabled={saving || browsing} onClick={() => setRemoving(true)}>Remove</button>
           </div>
           {removing ? <div className="slate-plugin-manager-confirm" role="alertdialog" aria-modal="true" aria-labelledby="slate-remove-heading" aria-describedby="slate-remove-description" onKeyDown={(event) => confirmationKeyDown(event, () => setRemoving(false))}>
             <strong id="slate-remove-heading">Remove {source.label.trim() || "this document"}?</strong>
@@ -356,13 +406,26 @@ function DocumentManagerEditor({ initialSources, onSave, onCancel }: { initialSo
             <div><button type="button" className="slate-plugin-remove" onClick={remove}>Remove from Slate</button><button type="button" ref={keepDocumentRef} onClick={() => setRemoving(false)}>Keep document</button></div>
           </div> : null}
           <div className="slate-plugin-manager-fields">
-            <ManagerField label="Label" error={showValidation ? sourceErrors.label : undefined}><input aria-label="Label" aria-invalid={Boolean(showValidation && sourceErrors.label)} value={source.label} onChange={(event) => update({ label: event.target.value })} /></ManagerField>
-            <ManagerField label="View"><select aria-label="View" value={source.view} onChange={(event) => update({ view: event.target.value as SlateSourceDefinition["view"] })}><option value="markdown">Markdown</option><option value="markdown-tabs">Tabbed Markdown</option><option value="table">Table</option><option value="table-tabs">Tabbed tables</option></select></ManagerField>
-            <ManagerField wide label="Absolute Markdown path" error={showValidation ? sourceErrors.path : undefined} hint="Slate reads this declared file; it never searches the folder."><input aria-label="Absolute Markdown path" aria-invalid={Boolean(showValidation && sourceErrors.path)} value={source.path} onChange={(event) => update({ path: event.target.value })} placeholder="/absolute/path/to/document.md" /></ManagerField>
+            <ManagerField label="Label" error={showValidation ? sourceErrors.label : undefined}><input aria-label="Label" aria-invalid={Boolean(showValidation && sourceErrors.label)} disabled={saving || browsing} value={source.label} onChange={(event) => update({ label: event.target.value })} /></ManagerField>
+            <ManagerField label="View"><select aria-label="View" disabled={saving || browsing} value={source.view} onChange={(event) => update({ view: event.target.value as SlateSourceDefinition["view"] })}><option value="markdown">Markdown</option><option value="markdown-tabs">Tabbed Markdown</option><option value="table">Table</option><option value="table-tabs">Tabbed tables</option></select></ManagerField>
+            <div className="slate-plugin-manager-file" data-wide="true" role="group" aria-labelledby="slate-manager-file-label">
+              <span id="slate-manager-file-label" className="slate-plugin-manager-file-label">Markdown file</span>
+              <div className="slate-plugin-manager-file-choice" data-empty={!source.path || undefined}>
+                <span className="slate-plugin-manager-file-glyph" aria-hidden="true">▤</span>
+                <span className="slate-plugin-manager-file-copy"><strong>{markdownFileName(source.path)}</strong><small title={source.path}>{source.path || "Choose an existing .md file."}</small></span>
+                {browseMarkdownFile ? <button ref={browseButtonRef} type="button" className="slate-plugin-manager-file-browse" aria-label={`${source.path ? "Change" : "Choose"} Markdown file for ${source.label.trim() || "document"}`} disabled={browsing || saving} onClick={() => { void browse(); }}>{browsing ? "Choosing…" : source.path ? "Change file…" : "Choose file…"}</button> : null}
+              </div>
+              {browseMessage ? <p className={browseMessage.tone === "error" ? "slate-plugin-manager-file-error" : "slate-plugin-manager-file-status"} role={browseMessage.tone === "error" ? "alert" : "status"}>{browseMessage.text}</p> : null}
+              <details className="slate-plugin-manager-manual-path" open={!browseMarkdownFile || (showValidation && Boolean(sourceErrors.path)) ? true : undefined}>
+                <summary>Enter path manually</summary>
+                {!browseMarkdownFile ? <p>File browsing is unavailable in this host.</p> : null}
+                <ManagerField label="Absolute Markdown path" error={showValidation ? sourceErrors.path : undefined} hint="Slate reads only this declared file; it never searches the folder."><input aria-label="Absolute Markdown path" aria-invalid={Boolean(showValidation && sourceErrors.path)} disabled={saving || browsing} value={source.path} onChange={(event) => update({ path: event.target.value })} placeholder="/absolute/path/to/document.md" /></ManagerField>
+              </details>
+            </div>
           </div>
           <details className="slate-plugin-manager-advanced" open={showValidation && Boolean(sourceErrors.id) ? true : undefined}>
             <summary>Advanced</summary>
-            <ManagerField label="Document ID" error={showValidation ? sourceErrors.id : undefined} hint="Stable lowercase identifier used by Slate."><input aria-label="Document ID" aria-invalid={Boolean(showValidation && sourceErrors.id)} value={source.id} onChange={(event) => update({ id: event.target.value })} /></ManagerField>
+            <ManagerField label="Document ID" error={showValidation ? sourceErrors.id : undefined} hint="Stable lowercase identifier used by Slate."><input aria-label="Document ID" aria-invalid={Boolean(showValidation && sourceErrors.id)} disabled={saving || browsing} value={source.id} onChange={(event) => update({ id: event.target.value })} /></ManagerField>
           </details>
         </> : <div className="slate-plugin-manager-editor-empty"><strong>No document selected</strong><p>Add a document to create its Slate configuration.</p><button type="button" onClick={add}>Add document</button></div>}
       </section>
@@ -374,7 +437,7 @@ function DocumentManagerEditor({ initialSources, onSave, onCancel }: { initialSo
     </div> : null}
     <footer className="slate-plugin-manager-footer">
       <span>{dirty ? "Unsaved changes" : `${sources.length} configured ${sources.length === 1 ? "document" : "documents"}`}</span>
-      <div><button type="button" className="slate-plugin-workspace-cancel" disabled={saving} onClick={cancel}>Cancel</button><button type="submit" className="slate-plugin-workspace-connect" disabled={saving || !dirty}>{saving ? "Saving…" : "Save documents"}</button></div>
+      <div><button type="button" className="slate-plugin-workspace-cancel" disabled={saving || browsing} onClick={cancel}>Cancel</button><button type="submit" className="slate-plugin-workspace-connect" disabled={saving || browsing || !dirty}>{saving ? "Saving…" : "Save documents"}</button></div>
     </footer>
   </form>;
 }
@@ -435,20 +498,16 @@ function SlateStyles() { return <style>{`
   .slate-plugin-manager-intro{align-items:center;display:flex;gap:24px;justify-content:space-between;margin:20px 0 18px}
   .slate-plugin-manager-intro p{color:var(--slate-text);font-size:16px;font-weight:750;margin:0 0 2px}
   .slate-plugin-manager-intro span{color:var(--slate-text-muted);font-size:12px}
-  .slate-plugin-manager-intro .slate-plugin-manager-order-note{display:block;margin-top:3px}
   .slate-plugin-manager-add{background:var(--slate-surface)!important;border-color:var(--slate-accent-warm)!important;color:var(--slate-accent-warm)!important;font-weight:700;white-space:nowrap}
   .slate-plugin-manager-layout{display:grid;grid-template-columns:minmax(220px,280px) minmax(0,1fr);min-height:410px;border-bottom:1px solid var(--slate-border);border-top:1px solid var(--slate-border)}
   .slate-plugin-manager-index{border-right:1px solid var(--slate-border);padding:10px 12px 10px 0}
-  .slate-plugin-manager-index-row{align-items:center;border-left:3px solid transparent;display:grid;grid-template-columns:minmax(0,1fr) auto;margin:1px 0;padding-left:2px}
+  .slate-plugin-manager-index-row{border-left:3px solid transparent;margin:1px 0;padding-left:2px}
   .slate-plugin-manager-index-row[data-selected=true]{background:var(--slate-surface-raised);border-left-color:var(--slate-accent)}
   .slate-plugin-manager-index-open{align-items:center;background:transparent!important;border:0!important;display:flex;gap:10px;min-width:0;padding:9px 7px!important;text-align:left}
   .slate-plugin-manager-index-open>span:last-child{display:grid;min-width:0}
   .slate-plugin-manager-index-open strong{color:var(--slate-text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .slate-plugin-manager-index-open small{color:var(--slate-text-muted);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .slate-plugin-manager-index-glyph{color:var(--slate-accent);font-size:18px}
-  .slate-plugin-manager-reorder{display:flex;padding-right:4px}
-  .slate-plugin-manager-reorder button{background:transparent!important;border:0!important;color:var(--slate-text-muted)!important;font-size:14px!important;padding:5px!important}
-  .slate-plugin-manager-reorder button:hover:not(:disabled){color:var(--slate-accent-warm)!important}
   .slate-plugin-manager-index-empty{color:var(--slate-text-muted);display:grid;gap:2px;padding:18px 12px}
   .slate-plugin-manager-index-empty strong{color:var(--slate-text)}
   .slate-plugin-manager-editor{min-width:0;padding:22px 0 26px 28px}
@@ -464,6 +523,22 @@ function SlateStyles() { return <style>{`
   .slate-plugin-manager-field small{color:var(--slate-text-muted);font-size:11px}
   .slate-plugin-manager-field input[aria-invalid=true]{border-color:var(--slate-danger)}
   .slate-plugin-manager-field-error{color:var(--slate-danger)!important}
+  .slate-plugin-manager-file{display:grid;gap:6px;grid-column:1/-1;min-width:0}
+  .slate-plugin-manager-file-label{color:var(--slate-text);font-size:12px;font-weight:750}
+  .slate-plugin-manager-file-choice{align-items:center;background:var(--slate-surface);border:1px solid var(--slate-border);border-radius:8px;display:grid;gap:10px;grid-template-columns:auto minmax(0,1fr) auto;padding:10px 11px}
+  .slate-plugin-manager-file-choice[data-empty=true]{border-style:dashed}
+  .slate-plugin-manager-file-glyph{color:var(--slate-accent);font-size:20px;line-height:1}
+  .slate-plugin-manager-file-copy{display:grid;min-width:0}
+  .slate-plugin-manager-file-copy strong{color:var(--slate-text);font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .slate-plugin-manager-file-copy small{color:var(--slate-text-muted);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .slate-plugin-manager-file-browse{background:var(--slate-surface-raised)!important;border-color:var(--slate-border)!important;font-size:12px!important;font-weight:700;white-space:nowrap}
+  .slate-plugin-manager-file-browse:hover:not(:disabled){border-color:var(--slate-accent-warm)!important;color:var(--slate-accent-warm)!important}
+  .slate-plugin-manager-file-status,.slate-plugin-manager-file-error{font-size:11px;margin:1px 0 0}
+  .slate-plugin-manager-file-status{color:var(--slate-text-muted)}
+  .slate-plugin-manager-file-error{color:var(--slate-danger)}
+  .slate-plugin-manager-manual-path{border-top:1px solid var(--slate-border);margin-top:7px;padding-top:10px}
+  .slate-plugin-manager-manual-path summary{color:var(--slate-text-muted);cursor:pointer;font-size:11px;margin-bottom:10px;width:max-content}
+  .slate-plugin-manager-manual-path>p{color:var(--slate-warning);font-size:11px;margin:0 0 8px}
   .slate-plugin-manager-advanced{border-top:1px solid var(--slate-border);margin-top:22px;padding-top:13px}
   .slate-plugin-manager-advanced summary{color:var(--slate-text-muted);cursor:pointer;font-size:12px;margin-bottom:14px}
   .slate-plugin-manager-confirm{background:color-mix(in srgb,var(--slate-danger) 8%,var(--slate-canvas));border-left:3px solid var(--slate-danger);margin:0 0 20px;padding:12px 14px}
@@ -541,6 +616,6 @@ function SlateStyles() { return <style>{`
   .slate-plugin-tooltip-arrow{fill:var(--slate-text)}
   .slate-plugin-error{color:var(--slate-danger)}
   .slate-plugin-demo{color:var(--slate-text-muted);font-size:12px;margin:14px 0 0}
-  @media (max-width:760px){.slate-plugin-sources{grid-template-columns:repeat(2,minmax(0,1fr))}.slate-plugin-manager-layout{grid-template-columns:1fr}.slate-plugin-manager-index{border-bottom:1px solid var(--slate-border);border-right:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));padding:10px 0}.slate-plugin-manager-editor{padding:22px 0}.slate-plugin-manager-index-empty{grid-column:1/-1}}
-  @media (max-width:520px){.slate-plugin-sources{grid-template-columns:1fr}.slate-plugin-source-header{align-items:start;flex-direction:column}.slate-plugin-workspace-tools{margin-top:4px}.slate-plugin-change-workspace{margin-top:0}.slate-plugin-workspace-path-row{grid-template-columns:1fr}.slate-plugin-workspace-browse{justify-self:start}.slate-plugin-manager-intro{align-items:start;flex-direction:column}.slate-plugin-manager-index{grid-template-columns:1fr}.slate-plugin-manager-fields{grid-template-columns:1fr}.slate-plugin-manager-footer{align-items:stretch;flex-direction:column}.slate-plugin-manager-footer>div{justify-content:flex-end}}
+  @media (max-width:760px){.slate-plugin-sources{grid-template-columns:repeat(2,minmax(0,1fr))}.slate-plugin-manager-layout{grid-template-columns:1fr}.slate-plugin-manager-index{border-bottom:1px solid var(--slate-border);border-right:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));padding:10px 0}.slate-plugin-manager-editor{padding:22px 0;scroll-margin-top:16px}.slate-plugin-manager-index-empty{grid-column:1/-1}.slate-plugin-manager-footer{position:static}}
+  @media (max-width:520px){.slate-plugin-sources{grid-template-columns:1fr}.slate-plugin-source-header{align-items:start;flex-direction:column}.slate-plugin-workspace-tools{margin-top:4px}.slate-plugin-change-workspace{margin-top:0}.slate-plugin-workspace-path-row{grid-template-columns:1fr}.slate-plugin-workspace-browse{justify-self:start}.slate-plugin-manager-intro{align-items:start;flex-direction:column}.slate-plugin-manager-index{grid-template-columns:1fr}.slate-plugin-manager-fields{grid-template-columns:1fr}.slate-plugin-manager-file-choice{align-items:start;grid-template-columns:auto minmax(0,1fr)}.slate-plugin-manager-file-browse{grid-column:1/-1;justify-self:start}.slate-plugin-manager-footer{align-items:stretch;flex-direction:column}.slate-plugin-manager-footer>div{justify-content:flex-end}}
 `}</style>; }

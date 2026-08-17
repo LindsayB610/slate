@@ -9,8 +9,8 @@ describe("Slate configuration", () => {
         { id: "tasks", label: "Tasks", path: "/private/tasks.md", view: "markdown-tabs" },
         { id: "notes", label: "Notes", path: "/private/notes.md", view: "markdown" },
         { id: "inventory", label: "Inventory", path: "/private/inventory.md", view: "table" },
-        { id: "archive", label: "Archive", path: "/private/archive.md", view: "table-tabs" },
-        { id: "reference", label: "Reference", path: "/private/reference.md", view: "markdown" }
+        { id: "archive", label: "Archive", path: "/private/archive.markdown", view: "table-tabs" },
+        { id: "reference", label: "Reference", path: "/private/reference.MD", view: "markdown" }
       ]
     }))).toMatchObject({ ok: true, config: { version: 1, sources: expect.arrayContaining([expect.objectContaining({ id: "archive", view: "table-tabs" })]) } });
   });
@@ -23,7 +23,9 @@ describe("Slate configuration", () => {
     ["duplicate ids", { version: 1, sources: [{ id: "same", label: "One", path: "/private/one.md", view: "markdown" }, { id: "same", label: "Two", path: "/private/two.md", view: "table" }] }],
     ["duplicate paths", { version: 1, sources: [{ id: "one", label: "One", path: "/private/shared.md", view: "markdown" }, { id: "two", label: "Two", path: "/private/shared.md", view: "table" }] }],
     ["unsupported view", { version: 1, sources: [{ id: "one", label: "One", path: "/private/one.md", view: "html" }] }],
-    ["relative path", { version: 1, sources: [{ id: "one", label: "One", path: "one.md", view: "markdown" }] }]
+    ["relative path", { version: 1, sources: [{ id: "one", label: "One", path: "one.md", view: "markdown" }] }],
+    ["traversal path", { version: 1, sources: [{ id: "one", label: "One", path: "/private/../one.markdown", view: "markdown" }] }],
+    ["non-Markdown extension", { version: 1, sources: [{ id: "one", label: "One", path: "/private/one.txt", view: "markdown" }] }]
   ])("rejects %s", (_label, value) => {
     expect(parseSlateConfig(JSON.stringify(value))).toMatchObject({ ok: false });
   });
@@ -35,7 +37,7 @@ describe("Slate plugin contract", () => {
       id: "slate",
       displayName: "Slate",
       configFile: "slate.config.json",
-      hostCapabilities: ["read-configured-markdown", "watch-configured-markdown", "manage-configured-markdown", "open_external_url"],
+      hostCapabilities: ["read-configured-markdown", "watch-configured-markdown", "manage-configured-markdown", "browse-markdown-file", "open_external_url"],
     });
   });
 

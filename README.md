@@ -23,6 +23,15 @@ field for review before the user connects it. Cancellation returns `undefined`
 or `{ ok: false, canceled: true }` and changes nothing. Slate does not import a
 dialog plugin or gain filesystem discovery through this callback.
 
+The optional `browseMarkdownFile(currentPath?)` callback provides the same
+host-owned boundary for a single Markdown file. It returns `{ ok: true, path }`
+after a user chooses an existing absolute `.md` or `.markdown` file. Extensions
+are matched case-insensitively. Slate places that path in
+the unsaved document draft; it does not persist anything until **Save
+documents** is chosen. Cancellation preserves the draft, and hosts may return a
+specific error for Slate to show. Slate does not import a native dialog package,
+enumerate a directory, copy the file, or edit its contents.
+
 ### Progressive theme inheritance
 
 When Slate is embedded in Workshop, it inherits Workshop's active semantic CSS
@@ -95,7 +104,7 @@ configuration.
 ### Adding and changing displayed documents
 
 Slate reads the `sources` array in your private `slate.config.json`. Use
-**Manage documents** in Slate to add, edit, remove, validate, and reorder that
+**Manage documents** in Slate to add, edit, remove, and validate that
 list without editing JSON. Save validates every id, label, view, duplicate
 path, and absolute Markdown path; Workshop then writes only the existing
 `slate.config.json` in the selected private folder. It will not create a
@@ -104,8 +113,9 @@ save leaves the draft visible with an error so it can be corrected or canceled.
 
 The manager permits an empty document list. That leaves Slate connected and
 shows its "No documents configured" state until a source is added again.
-The manager's arrows change the order stored in the private configuration;
-the Slate home shelves remain alphabetized by visible label.
+Slate preserves the existing configuration order internally, but does not expose
+ordering controls because the visible home shelves are always alphabetized by
+label. New documents are appended to the private configuration.
 Each source needs a unique lowercase, hyphenated `id`, a human-readable
 `label`, an absolute Markdown `path`, and a supported `view`.
 

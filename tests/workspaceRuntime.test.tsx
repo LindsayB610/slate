@@ -319,6 +319,21 @@ describe("connected Slate workspace controls", () => {
     });
   });
 
+  it("persists a browsed Markdown file only after Save documents", async () => {
+    const browseMarkdownFile = vi.fn(async () => ({ ok: true, path: "/private/replacement.md" } as const));
+    render(<WorkshopToolView workspaceRoot="/private/slate" requestWorkspaceRoot={() => undefined} browseMarkdownFile={browseMarkdownFile} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Manage documents" }));
+    await screen.findByDisplayValue("Notes");
+
+    fireEvent.click(screen.getByRole("button", { name: "Change Markdown file for Notes" }));
+    expect(await screen.findByText("replacement.md")).toBeTruthy();
+    expect(invoke.mock.calls.some(([command]) => command === "write_configured_markdown_config")).toBe(false);
+
+    fireEvent.click(screen.getByRole("button", { name: "Save documents" }));
+    await screen.findByRole("heading", { name: "Slate" });
+    expect(host.config.sources[0]?.path).toBe("/private/replacement.md");
+  });
+
   it("recovers from a configuration load failure through an explicit retry", async () => {
     await renderConnected();
     host.readConfigFailures = 1;

@@ -14,7 +14,7 @@ describe("Slate Workshop plugin surface", () => {
       status: "ready",
       privateWorkspace: { requiredFields: ["slate.config.json"] },
       requiredLocalCapabilities: ["local-workspace"],
-      optionalHostCapabilities: ["configured_markdown_config_management", "open_external_url"],
+      optionalHostCapabilities: ["configured_markdown_config_management", "browse_markdown_file", "open_external_url"],
     });
   });
 
@@ -54,6 +54,13 @@ describe("Slate Workshop plugin surface", () => {
     expect(pluginSource).toContain("@media (max-width:520px){.slate-plugin-sources{grid-template-columns:1fr}");
   });
 
+  it("keeps stacked document management actions from covering the editor", () => {
+    const pluginSource = readFileSync(new URL("../src/plugin.tsx", import.meta.url), "utf8");
+    expect(pluginSource).toContain("@media (max-width:760px)");
+    expect(pluginSource).toContain(".slate-plugin-manager-footer{position:static}");
+    expect(pluginSource).toContain(".slate-plugin-manager-editor{padding:22px 0;scroll-margin-top:16px}");
+  });
+
   it("renders a dedicated favorite control and omits an empty Favorites shelf", () => {
     const pluginSource = readFileSync(new URL("../src/plugin.tsx", import.meta.url), "utf8");
     expect(pluginSource).toContain("Add ${source.label} to favorites");
@@ -83,10 +90,11 @@ describe("Slate Workshop plugin surface", () => {
     expect(pluginSource).toContain("Manage documents");
     expect(pluginSource).toContain("read_configured_markdown_config");
     expect(pluginSource).toContain("write_configured_markdown_config");
-    expect(pluginSource).toContain("Move ${label} up");
-    expect(pluginSource).toContain("Move ${label} down");
+    expect(pluginSource).not.toContain("Move ${label} up");
+    expect(pluginSource).not.toContain("Move ${label} down");
     expect(pluginSource).toContain("Remove");
     expect(pluginSource).toContain("Markdown files are never edited");
+    expect(pluginSource).toContain("browseMarkdownFile");
   });
 
   it("gives a remembered but inaccessible folder a specific recovery path", () => {

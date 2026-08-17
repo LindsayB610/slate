@@ -44,14 +44,14 @@ export type SlatePluginManifest = {
   id: "slate";
   displayName: "Slate";
   configFile: "slate.config.json";
-  hostCapabilities: ["read-configured-markdown", "watch-configured-markdown", "manage-configured-markdown", "open_external_url"];
+  hostCapabilities: ["read-configured-markdown", "watch-configured-markdown", "manage-configured-markdown", "browse-markdown-file", "open_external_url"];
 };
 
 export const slatePluginManifest: SlatePluginManifest = {
   id: "slate",
   displayName: "Slate",
   configFile: "slate.config.json",
-  hostCapabilities: ["read-configured-markdown", "watch-configured-markdown", "manage-configured-markdown", "open_external_url"],
+  hostCapabilities: ["read-configured-markdown", "watch-configured-markdown", "manage-configured-markdown", "browse-markdown-file", "open_external_url"],
 };
 
 /**
@@ -71,7 +71,7 @@ export const workshopPluginDeclaration = {
   ],
   navigationMode: "plugin" as const,
   requiredLocalCapabilities: ["local-workspace"] as const,
-  optionalHostCapabilities: ["configured_markdown_config_management", "open_external_url"] as const,
+  optionalHostCapabilities: ["configured_markdown_config_management", "browse_markdown_file", "open_external_url"] as const,
   dataRoots: [] as string[],
   importActions: [] as string[],
   exportActions: [] as string[],
@@ -81,7 +81,7 @@ export const workshopPluginDeclaration = {
 };
 
 export { WorkshopToolView } from "./plugin.js";
-export type { BrowseWorkspaceRoot, WorkshopToolViewProps, WorkspaceRootBrowseResult, WorkspaceRootRequestResult } from "./plugin.js";
+export type { BrowseMarkdownFile, BrowseWorkspaceRoot, MarkdownFileBrowseResult, WorkshopToolViewProps, WorkspaceRootBrowseResult, WorkspaceRootRequestResult } from "./plugin.js";
 
 export function parseSlateConfig(contents: string): SlateConfigResult {
   let value: unknown;
@@ -116,6 +116,11 @@ export function parseSlateConfig(contents: string): SlateConfigResult {
   }
 
   return { ok: true, config: { version: 1, sources } };
+}
+
+/** Accepts an absolute, traversal-free path to a conventional Markdown file. */
+export function isSlateMarkdownPath(path: string): boolean {
+  return /^\/(?!.*(?:^|\/)\.\.(?:\/|$)).+\.(?:md|markdown)$/i.test(path);
 }
 
 export function parseMarkdownSections(markdown: string): MarkdownSection[] {
@@ -210,7 +215,7 @@ function isSourceDefinition(value: unknown): value is SlateSourceDefinition {
   return Boolean(
     typeof source.id === "string" && /^[a-z0-9][a-z0-9-]*$/.test(source.id) &&
     typeof source.label === "string" && source.label.trim() &&
-    typeof source.path === "string" && /^\/(?!.*(?:^|\/)\.\.(?:\/|$)).+\.md$/.test(source.path) &&
+    typeof source.path === "string" && isSlateMarkdownPath(source.path) &&
     typeof source.view === "string" && (slateViewFormats as readonly string[]).includes(source.view),
   );
 }
