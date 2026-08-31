@@ -153,8 +153,13 @@ Each source needs a unique lowercase, hyphenated `id`, a human-readable
 
 Supported views:
 
-- `markdown-tabs` groups top-level Markdown headings into tabs.
-- `markdown` preserves a single, scrollable Markdown view.
+- `markdown-tabs` groups top-level Markdown headings into tabs. Valid Markdown
+  tables render in place inside their owning tab and retain Slate's sortable
+  column controls; a table is never borrowed from another tab. Content before
+  the first heading stays above the tabs.
+- `markdown` preserves a single, scrollable Markdown view. Valid Markdown
+  tables render in place among the surrounding headings, prose, and lists and
+  retain Slate's sortable column controls. A heading is optional.
 - `table` renders the largest valid Markdown table in the file, keeping its
   source columns and row order. This lets a file include a small legend or key
   before its primary data table. “Largest” means the most body rows; if tables
@@ -164,6 +169,15 @@ Supported views:
   of tabs, then renders the largest valid Markdown table inside the selected
   top-level-heading tab. Tables are never selected from another tab. A tab with
   no valid table shows an in-place message instead of failing the document.
+
+All four views use the same table tokenizer, including support for escaped
+literal pipes (`\|`) inside cells, optional leading and trailing table pipes,
+left/center/right separator alignment, and safe inline links. Sorting is
+UI-only: it never changes the Markdown file or writes a reordered copy.
+Malformed table syntax remains visible as text in `markdown` and
+`markdown-tabs` rather than silently disappearing. Table examples inside
+backtick or tilde code fences remain ordinary text rather than sortable tables
+and are not selected by table views.
 
 ### Favorites and source order
 
@@ -192,11 +206,15 @@ personal data.
 ```sh
 npm install
 npm test
+npm run test:coverage
 npm run typecheck
 npm run build
 npm run public:check
 npm run package:check
 ```
+
+The coverage gate requires at least 89% statement coverage, 95% line coverage,
+and 85% branch and function coverage across Slate's production TypeScript.
 
 Run `npm run preview:local` for Slate's standalone fallbacks. Add
 `?host-theme=preview` to that local URL to exercise the generic inherited-token

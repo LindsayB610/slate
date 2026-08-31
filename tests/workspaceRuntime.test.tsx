@@ -16,6 +16,7 @@ const host = vi.hoisted(() => ({
   pendingMetadataByRoot: {} as Partial<Record<string, Promise<Array<{ id: string; label: string; view: "markdown" | "markdown-tabs" | "table" | "table-tabs" }>>>>,
   pendingWatchByRoot: {} as Partial<Record<string, Promise<void>>>,
   metadataErrorRoots: new Set<string>(),
+  sourceChangeListeners: [] as Array<(event: { payload: { root: string; configFile: string; source: string } }) => void>,
 }));
 
 const invoke = vi.hoisted(() => vi.fn(async (command: string, args?: Record<string, unknown>) => {
@@ -51,7 +52,12 @@ const invoke = vi.hoisted(() => vi.fn(async (command: string, args?: Record<stri
 }));
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke }));
-vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => () => undefined) }));
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: vi.fn(async (_event: string, callback: (event: { payload: { root: string; configFile: string; source: string } }) => void) => {
+    host.sourceChangeListeners.push(callback);
+    return () => { host.sourceChangeListeners = host.sourceChangeListeners.filter((listener) => listener !== callback); };
+  }),
+}));
 
 import { WorkshopToolView } from "../src/index.js";
 
@@ -77,6 +83,7 @@ describe("connected Slate workspace controls", () => {
     host.pendingMetadataByRoot = {};
     host.pendingWatchByRoot = {};
     host.metadataErrorRoots.clear();
+    host.sourceChangeListeners = [];
     invoke.mockClear();
   });
   afterEach(() => {
@@ -375,5 +382,80 @@ describe("connected Slate workspace controls", () => {
     expect(await screen.findByRole("heading", { name: "No documents configured" })).toBeTruthy();
     await waitFor(() => expect(host.config.sources).toEqual([]));
     expect(screen.queryByText(/couldn't open this folder/i)).toBeNull();
+  });
+
+  it("renders a headingless Markdown table through the production source boundary", async () => {
+    host.snapshotsByRoot["/private/slate"] = {
+      notes: { contents: "| Item | State |\n| --- | --- |\n| Draft | Ready |", updatedAt: 1 },
+    };
+    await renderConnected();
+
+    fireEvent.click(screen.getByRole("button", { name: "Open Notes" }));
+
+    expect(await screen.findByRole("table")).toBeTruthy();
+    expect(screen.getByRole("cell", { name: "Draft" })).toBeTruthy();
+  });
+
+  it("keeps pre-heading content above tabs in a mounted tabbed document", async () => {
+    host.config.sources[0].view = "markdown-tabs";
+    host.snapshotsByRoot["/private/slate"] = {
+      notes: { contents: "Reference index\n\n| Owner | State |\n| --- | --- |\n| Avery | Ready |\n\n# First\nFirst tab.\n\n# Second\nSecond tab.", updatedAt: 1 },
+    };
+    await renderConnected();
+
+    fireEvent.click(screen.getByRole("button", { name: "Open Notes" }));
+
+    expect(await screen.findByRole("table")).toBeTruthy();
+    expect(screen.getByRole("tab", { name: "First" })).toBeTruthy();
+    expect(screen.getByText("Reference index")).toBeTruthy();
+  });
+
+  it("renders multiple inline tables in their original document order", async () => {
+    host.snapshotsByRoot["/private/slate"] = {
+      notes: { contents: "# Notes\n| First | State |\n| --- | --- |\n| A | Ready |\n\nBetween tables.\n\nSecond | Count\n--- | ---:\nB | 2", updatedAt: 1 },
+    };
+    await renderConnected();
+
+    fireEvent.click(screen.getByRole("button", { name: "Open Notes" }));
+
+    const tables = await screen.findAllByRole("table");
+    expect(tables).toHaveLength(2);
+    expect(screen.getByText("Between tables.")).toBeTruthy();
+    expect(tables[0].compareDocumentPosition(tables[1]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("keeps a fenced Markdown table example non-interactive in the mounted view", async () => {
+    host.snapshotsByRoot["/private/slate"] = {
+      notes: { contents: "# Examples\n```md\n| Item | State |\n| --- | --- |\n| Draft | Ready |\n```", updatedAt: 1 },
+    };
+    await renderConnected();
+
+    fireEvent.click(screen.getByRole("button", { name: "Open Notes" }));
+
+    expect(screen.queryByRole("table")).toBeNull();
+    expect(screen.getByText("| Item | State |", { exact: true })).toBeTruthy();
+  });
+
+  it("survives a watched refresh that removes the actively sorted column", async () => {
+    host.snapshotsByRoot["/private/slate"] = {
+      notes: { contents: "# Notes\n| Item | State |\n| --- | --- |\n| Bravo | Open |\n| Alpha | Ready |", updatedAt: 1 },
+    };
+    await renderConnected();
+    fireEvent.click(screen.getByRole("button", { name: "Open Notes" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Sort State ascending" }));
+
+    host.snapshotsByRoot["/private/slate"].notes = {
+      contents: "# Notes\n| Item |\n| --- |\n| Bravo |\n| Alpha |",
+      updatedAt: 2,
+    };
+    for (const listener of host.sourceChangeListeners) {
+      listener({ payload: { root: "/private/slate", configFile: "slate.config.json", source: "notes" } });
+    }
+
+    await waitFor(() => expect(screen.queryByRole("columnheader", { name: /State/ })).toBeNull());
+    expect(screen.getByRole("table")).toBeTruthy();
+    expect(screen.getByRole("cell", { name: "Alpha" })).toBeTruthy();
+    expect(screen.getByRole("columnheader", { name: /Item/ }).getAttribute("aria-sort")).toBe("none");
+    expect(screen.getAllByRole("row")[1].textContent).toContain("Bravo");
   });
 });

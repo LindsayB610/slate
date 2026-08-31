@@ -31,6 +31,11 @@ export function slateHeadingTag(level: number): "h2" | "h3" | "h4" {
   return level <= 1 ? "h2" : level === 2 ? "h3" : "h4";
 }
 
+/** Provides stable semantic hooks for column-specific table presentation. */
+export function slateTableColumnKey(header: string): string {
+  return header.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "column";
+}
+
 /** Parses the small, safe inline Markdown subset Slate renders in local documents. */
 export function parseInlineMarkdown(value: string): InlineMarkdownToken[] {
   const tokens: InlineMarkdownToken[] = [];
@@ -76,6 +81,11 @@ export const slateDemoSnapshots: Record<string, SlateSnapshot> = {
 - Send the [revised project outline](https://example.com/project-outline)
 - Set aside a focused afternoon for image selection
 - Confirm the production schedule with collaborators
+## Weekly checkpoints
+| Checkpoint | Owner | Status |
+| --- | --- | --- |
+| Project outline | Studio | Ready |
+| Image selection | Creative | Scheduled |
 
 # 🛠️ Writing
 ## Current state
@@ -147,7 +157,13 @@ Use this space for decisions that should remain easy to find. Capture the **conc
 - Is there a better home for this information?
 
 ## Useful links
-Keep external links descriptive and limited to trusted destinations, like the [reference library](https://example.com/reference-library).` },
+Keep external links descriptive and limited to trusted destinations, like the [reference library](https://example.com/reference-library).
+
+## Quick reference
+| Reference | Status |
+| --- | :---: |
+| Writing guide | [Ready](https://example.com/ready) |
+| Archive map | Review |` },
   inventory: { updatedAt: Date.parse("2026-08-05T18:45:00-07:00"), contents: `# Home inventory
 
 | Category | Item | On hand | Location | Notes |
@@ -182,9 +198,9 @@ Keep completed work and useful reference material here.` },
   reports: { updatedAt: Date.parse("2026-08-05T18:45:00-07:00"), contents: `# Weekly reports
 ---
 # August 5
-| Topic | Score |
-| --- | ---: |
-| Content strategy | 71 |` },
+Topic | Score
+--- | ---:
+Content strategy | 71` },
 };
 
 const favoriteStoragePrefix = "slate.favorite-source-ids.v1:";
@@ -264,7 +280,7 @@ export type TableSortDirection = "ascending" | "descending";
 export function sortTableRows(rows: string[][], column: number, direction: TableSortDirection): string[][] {
   const multiplier = direction === "ascending" ? 1 : -1;
   return rows.map((row, index) => ({ row, index })).sort((left, right) => {
-    const comparison = left.row[column].localeCompare(right.row[column], undefined, { numeric: true, sensitivity: "base" });
+    const comparison = (left.row[column] ?? "").localeCompare(right.row[column] ?? "", undefined, { numeric: true, sensitivity: "base" });
     return comparison === 0 ? left.index - right.index : comparison * multiplier;
   }).map(({ row }) => row);
 }

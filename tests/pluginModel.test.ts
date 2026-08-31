@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { clearSlateFavoriteSourceIds, describeSlateView, externalLinkFailureMessage, isSlateTauriRuntime, keepLatestSnapshot, loadSlateFavoriteSourceIds, openSlateExternalUrl, parseInlineMarkdown, partitionSlateSources, releaseIfDisposed, retainSelectedSource, saveSlateFavoriteSourceIds, shouldRefreshSource, slateFavoriteStorageKey, slateHeadingTag, slateLinkTarget, sortTableRows, toggleSlateFavoriteSourceId, validateSourceMetadata } from "../src/pluginModel.js";
+import { clearSlateFavoriteSourceIds, describeSlateView, externalLinkFailureMessage, isSlateTauriRuntime, keepLatestSnapshot, loadSlateFavoriteSourceIds, openSlateExternalUrl, parseInlineMarkdown, partitionSlateSources, releaseIfDisposed, retainSelectedSource, saveSlateFavoriteSourceIds, shouldRefreshSource, slateFavoriteStorageKey, slateHeadingTag, slateLinkTarget, slateTableColumnKey, sortTableRows, toggleSlateFavoriteSourceId, validateSourceMetadata } from "../src/pluginModel.js";
 
 describe("Slate plugin refresh boundary", () => {
   it("describes each Slate-owned source view for the source picker", () => {
@@ -14,6 +14,12 @@ describe("Slate plugin refresh boundary", () => {
     expect(slateHeadingTag(2)).toBe("h3");
     expect(slateHeadingTag(3)).toBe("h4");
     expect(slateHeadingTag(6)).toBe("h4");
+  });
+
+  it("creates stable semantic table-column hooks from Markdown headers", () => {
+    expect(slateTableColumnKey(" Task ")).toBe("task");
+    expect(slateTableColumnKey("Client / use")).toBe("client-use");
+    expect(slateTableColumnKey("***")).toBe("column");
   });
 
   it("accepts only unique Slate-owned source metadata and supported views", () => {
@@ -58,6 +64,10 @@ describe("Slate table sorting", () => {
     expect(sortTableRows(rows, 0, "ascending")).toEqual([["Item 1"], ["item 2"], ["Item 10"]]);
     expect(sortTableRows(rows, 0, "descending")).toEqual([["Item 10"], ["item 2"], ["Item 1"]]);
     expect(rows).toEqual([["Item 10"], ["item 2"], ["Item 1"]]);
+  });
+
+  it("does not crash when a watched table refresh removes the selected column", () => {
+    expect(sortTableRows([["Bravo"], ["Alpha"]], 1, "ascending")).toEqual([["Bravo"], ["Alpha"]]);
   });
 });
 

@@ -41,9 +41,136 @@ Short run summary.
     expect(parseMarkdownSections("# Notes\nKeep this nearby.")[0]).toMatchObject({ heading: "Notes", paragraphs: ["Keep this nearby."] });
   });
 
+  it("preserves prose, lists, and valid tables as ordered Markdown content blocks", () => {
+    const [section] = parseMarkdownSections(`# Notes
+Before the table.
+
+| Item | Count |
+| --- | ---: |
+| Tea | 2 |
+
+- Restock coffee
+- Check labels
+
+After the list.`);
+
+    expect(section.blocks).toEqual([
+      { type: "paragraph", value: "Before the table." },
+      { type: "table", table: { headers: ["Item", "Count"], alignments: [undefined, "right"], rows: [["Tea", "2"]] } },
+      { type: "list", items: ["Restock coffee", "Check labels"] },
+      { type: "paragraph", value: "After the list." },
+    ]);
+  });
+
+  it("preserves headingless prose and tables in an implicit document section", () => {
+    const [section] = parseMarkdownSections(`Keep this reference nearby.
+
+| Item | State |
+| --- | --- |
+| Draft | Ready |`);
+
+    expect(section).toMatchObject({ heading: "", level: 0 });
+    expect(section.paragraphs[0]).toBe("Keep this reference nearby.");
+    expect(section.blocks).toEqual([
+      { type: "paragraph", value: "Keep this reference nearby." },
+      { type: "table", table: { headers: ["Item", "State"], alignments: [undefined, undefined], rows: [["Draft", "Ready"]] } },
+    ]);
+  });
+
+  it("keeps leading headingless content above top-level Markdown tabs", () => {
+    const document = splitTabbedDocument(parseMarkdownSections(`Reference index
+
+| Owner | State |
+| --- | --- |
+| Avery | Ready |
+
+# First
+First tab.
+
+# Second
+Second tab.`));
+
+    expect(document.intro).toHaveLength(1);
+    expect(document.intro[0]).toMatchObject({ heading: "", level: 0 });
+    expect(document.tabs.map((tab) => tab.label)).toEqual(["First", "Second"]);
+  });
+
+  it("keeps fenced Markdown examples as text instead of executable document structure", () => {
+    const sections = parseMarkdownSections(`# Examples
+\`\`\`md
+# Example heading
+| Name | State |
+| --- | --- |
+| Alpha | Ready |
+\`\`\``);
+
+    expect(sections).toHaveLength(1);
+    expect(sections[0].blocks).not.toContainEqual(expect.objectContaining({ type: "table" }));
+    expect(sections[0].blocks).toEqual([
+      { type: "paragraph", value: "```md" },
+      { type: "paragraph", value: "# Example heading" },
+      { type: "paragraph", value: "| Name | State |" },
+      { type: "paragraph", value: "| --- | --- |" },
+      { type: "paragraph", value: "| Alpha | Ready |" },
+      { type: "paragraph", value: "```" },
+    ]);
+  });
+
+  it("also keeps tilde-fenced table examples as text", () => {
+    const [section] = parseMarkdownSections(`# Examples
+~~~md
+| Name | State |
+| --- | --- |
+| Alpha | Ready |
+~~~`);
+
+    expect(section.blocks).not.toContainEqual(expect.objectContaining({ type: "table" }));
+    expect(section.blocks?.map((block) => block.type === "paragraph" ? block.value : block.type)).toContain("| Name | State |");
+  });
+
+  it("preserves multiple inline tables in source order", () => {
+    const [section] = parseMarkdownSections(`# Notes
+| First | State |
+| --- | --- |
+| A | Ready |
+
+Between tables.
+
+Second | Count
+--- | ---:
+B | 2`);
+
+    expect(section.blocks?.map((block) => block.type)).toEqual(["table", "paragraph", "table"]);
+  });
+
+  it("keeps malformed inline table syntax visible instead of silently dropping it", () => {
+    const [section] = parseMarkdownSections(`# Notes
+| Item | Count |
+| --- | --- |
+| Tea | 2 | extra |`);
+
+    const blocks = section.blocks ?? [];
+    expect(blocks).not.toContainEqual(expect.objectContaining({ type: "table" }));
+    expect(blocks.map((block) => block.type === "paragraph" ? block.value : block.type)).toEqual([
+      "| Item | Count |",
+      "| --- | --- |",
+      "| Tea | 2 | extra |",
+    ]);
+  });
+
   it("parses a generic Markdown table with arbitrary columns", () => {
     expect(parseMarkdownTable("# Inventory\n\n| Item | Count | Location |\n| --- | --- | --- |\n| Tea | 2 | Shelf |"))
-      .toEqual({ headers: ["Item", "Count", "Location"], rows: [["Tea", "2", "Shelf"]] });
+      .toEqual({ headers: ["Item", "Count", "Location"], alignments: [undefined, undefined, undefined], rows: [["Tea", "2", "Shelf"]] });
+  });
+
+  it("parses tables without optional outer pipes and preserves column alignment", () => {
+    expect(parseMarkdownTable(`Item | Count | Status
+:--- | ---: | :---:
+Tea | 2 | Ready`)).toEqual({
+      headers: ["Item", "Count", "Status"],
+      alignments: ["left", "right", "center"],
+      rows: [["Tea", "2", "Ready"]],
+    });
   });
 
   it("keeps escaped pipes inside their table cell and renders their display value naturally", () => {
@@ -52,6 +179,7 @@ Short run summary.
 | content system \\| operating model | valid |`))
       .toEqual({
         headers: ["Keyword", "Note"],
+        alignments: [undefined, undefined],
         rows: [["content system | operating model", "valid"]],
       });
   });
@@ -67,6 +195,21 @@ Short run summary.
 | South | Blair | Call |`);
     expect(table.headers).toEqual(["Name", "Owner", "Next action"]);
     expect(table.rows).toHaveLength(2);
+  });
+
+  it("ignores table examples inside fenced code when selecting a table view", () => {
+    const table = parseMarkdownTable(`\`\`\`md
+| Example | Score |
+| --- | --- |
+| Fake | 100 |
+| Also fake | 90 |
+\`\`\`
+
+| Actual | Score |
+| --- | --- |
+| Real | 71 |`);
+
+    expect(table).toMatchObject({ headers: ["Actual", "Score"], rows: [["Real", "71"]] });
   });
 
   it("selects tables only within the requested date tab", () => {

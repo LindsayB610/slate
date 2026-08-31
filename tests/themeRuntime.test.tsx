@@ -94,4 +94,15 @@ describe("mounted Slate host theme behavior", () => {
     expect(css).toContain("color:var(--slate-canvas)");
     expect(css).toContain(".slate-plugin-tooltip-arrow{fill:var(--slate-text)}");
   });
+
+  it("marks table cells by semantic column and gives task text readable width", () => {
+    renderPreview();
+    const inventory = screen.getByText("Inventory").closest("button");
+    if (!inventory) throw new Error("Inventory source button was not mounted.");
+    fireEvent.click(inventory);
+
+    const categoryHeader = screen.getByRole("button", { name: "Sort Category ascending" }).closest("th");
+    expect(categoryHeader?.getAttribute("data-column")).toBe("category");
+    expect(slateStyles().textContent).toContain("th[data-column=task],.slate-plugin td[data-column=task]{min-width:260px}");
+  });
 });
