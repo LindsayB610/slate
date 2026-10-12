@@ -23,7 +23,11 @@ for (const file of listed.stdout.split("\n").filter(Boolean)) {
   if (excluded.has(file) || /\.(?:png|jpe?g|gif|ico|woff2?)$/i.test(file)) continue;
   const contents = readFileSync(new URL(`../${file}`, import.meta.url), "utf8");
   for (const pattern of privatePatterns) {
-    if (contents.includes(pattern.value)) findings.push(`${file}: ${pattern.label}`);
+    // Permit the documented placeholder only in README; scan everything else unchanged.
+    const scannedContents = file === "README.md" && pattern.label === "absolute macOS user path"
+      ? contents.replaceAll(`${pattern.value}you/`, "")
+      : contents;
+    if (scannedContents.includes(pattern.value)) findings.push(`${file}: ${pattern.label}`);
   }
 }
 
